@@ -55,7 +55,7 @@ function Booking() {
     setLoading(true); 
 
     try {
-      const response = await fetch("https://dogwalkerbackend.onrender.com", {
+      const response = await fetch("https://dogwalkerbackend.onrender.com/book", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(bookingData),
