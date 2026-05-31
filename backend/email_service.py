@@ -9,7 +9,7 @@ EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
 # Admin
-ADMIN_EMAIL = "gaurisinghme1712@gmail.com"
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 
 
 def send_booking_email(apartment, name, mobile, flatNo, address):
