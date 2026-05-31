@@ -8,7 +8,7 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173",
-                   "https://dogwalker.onrender.com"
+                   "https://zuppy.onrender.com"
                    ],  
     allow_credentials=True,
     allow_methods=["*"],  
