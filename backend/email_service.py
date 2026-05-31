@@ -14,7 +14,9 @@ ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 
 def send_booking_email(apartment, name, mobile, flatNo, address):
     """Builds and sends the booking notification email to the admin."""
-
+    print("send_booking_email function started")
+    print("EMAIL_USER =", EMAIL_USER)
+    print("ADMIN_EMAIL =", ADMIN_EMAIL)
     subject = f"Booking from Apartment {apartment}"
 
 #emailformt
