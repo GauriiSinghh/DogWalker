@@ -39,7 +39,7 @@ def send_booking_email(apartment, name, mobile, flatNo, address):
 
     # # Connect to Gmail's SMTP server and send
 try: 
-    server = smtplib.SMTP("smtp.gmail.com", 465)  # connect                           
+    server = smtplib.SMTP_SSL("smtp.gmail.com", 465)  # connect                           
     server.login(EMAIL_USER, EMAIL_PASSWORD)    
     server.send_message(message)                  # sendemail
     server.quit()                                
