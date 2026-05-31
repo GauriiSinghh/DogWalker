@@ -39,12 +39,10 @@ def send_booking_email(apartment, name, mobile, flatNo, address):
 
     # # Connect to Gmail's SMTP server and send
 try: 
-    server = smtplib.SMTP("smtp.gmail.com", 587)  # connect
-    server.starttls()                            
+    server = smtplib.SMTP("smtp.gmail.com", 465)  # connect                           
     server.login(EMAIL_USER, EMAIL_PASSWORD)    
     server.send_message(message)                  # sendemail
     server.quit()                                
-
     print(f"✅ Email sent to {ADMIN_EMAIL}")
 
 except Exception as e:
