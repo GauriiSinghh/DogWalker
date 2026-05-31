@@ -11,10 +11,10 @@ import { WHATSAPP_URL } from "./Navbar.jsx";
 import { Link } from "react-router-dom";
 
 const SOCIALS = [
-  { icon: <FaLinkedinIn />, label: "LinkedIn", href: "https://linkedin.com", brand: "#0a66c2" },
-  { icon: <FaInstagram />, label: "Instagram", href: "https://instagram.com", brand: "#e1306c" },
-  { icon: <FaXTwitter />, label: "X (Twitter)", href: "https://x.com", brand: "#000000" },
-  { icon: <FaFacebookF />, label: "Facebook", href: "https://facebook.com", brand: "#1877f2" },
+  { icon: <FaLinkedinIn />, label: "LinkedIn", href: "https://www.linkedin.com/company/paws-pal-connect/", brand: "#0a66c2" },
+  { icon: <FaInstagram />, label: "Instagram", href: "https://www.instagram.com/pawspalconnect?igsh=MWN6YmJoaDY2NWtmaQ==", brand: "#e1306c" },
+  { icon: <FaXTwitter />, label: "X (Twitter)", href: "https://x.com/PawsPalConnect", brand: "#000000" },
+  { icon: <FaFacebookF />, label: "Facebook", href: "https://www.facebook.com/pawspalconnect", brand: "#1877f2" },
   { icon: <FaWhatsapp />, label: "WhatsApp", href: WHATSAPP_URL, brand: "#25d366" },
 ];
 
@@ -101,7 +101,7 @@ function Footer() {
               </li>
               <li>
                 <a href={WHATSAPP_URL} className="footer-link">
-                  +91 80-5095-8787
+                  +91 80509-58787
                 </a>
               </li>
             </ul>

@@ -5,7 +5,7 @@ import { FaBars, FaXmark } from "react-icons/fa6";
 import { useScrollToSection } from "../hooks/useScrollToSection.js";
 import { useActiveSection } from "../hooks/useActiveSection.js";
 
-export const WHATSAPP_URL = "https://wa.me/918050958787";
+export const WHATSAPP_URL = "https://wa.link/xn4rnp";
 
 const SECTIONS = ["home", "services", "communities", "about", "contact"];
 
