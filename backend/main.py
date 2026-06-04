@@ -80,43 +80,31 @@ def signup(user_data: UserCreate, db: Session = Depends(get_db)):
         "token_type": "bearer"
     }
 
-import time
-
 @app.post("/login")
 def login(user_data: UserLogin, db: Session = Depends(get_db)):
-    start = time.time()
-
-    user = db.query(User).filter(
-        User.email == user_data.email
-    ).first()
-
-    print("DB QUERY:", time.time() - start)
-
-    verify_start = time.time()
-
-    if not user or not verify_password(
-        user_data.password,
-        user.hashed_password
-    ):
+    """Authenticate user and return JWT"""
+    print(f"🔐 Login request for email: {user_data.email}")
+    
+    user = db.query(User).filter(User.email == user_data.email).first()
+    print(user.hashed_password)
+    
+    if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(
-            status_code=401,
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
         )
-
-    print("PASSWORD VERIFY:", time.time() - verify_start)
-
-    total = time.time() - start
-    print("TOTAL LOGIN:", total)
-
-    access_token = create_access_token(
-        data={"sub": str(user.id)}
-    )
-
+    
+    access_token = create_access_token(data={"sub": str(user.id)})
+    user_response = UserResponse.from_orm(user)
+    
+    print(f"✅ User {user_data.email} logged in successfully")
+    
     return {
-        "user": UserResponse.from_orm(user),
+        "user": user_response,
         "access_token": access_token,
         "token_type": "bearer"
     }
+
 # ===== BOOKING ENDPOINT =====
 
 @app.post("/book")
