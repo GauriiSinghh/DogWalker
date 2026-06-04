@@ -45,7 +45,7 @@ const SOCIALS = [
   {
     icon: <FaWhatsapp />,
     label: "WhatsApp",
-    href: "https://wa.me/918050958787",
+    href: "https://wa.me/918050958787?text=Welcome%20to%20Zuppy%20%3A%20Emergency%20Pet%20Care%20Service%20%3A%20Dog%20Walker%20in%2010%20min",
     brand: "#25d366",
   },
 ];
@@ -125,23 +125,38 @@ function Footer({ onNav, onBook }) {
   <h4 className="footer-col-title">Company</h4>
 
   <ul className="footer-list">
-    <li>
-      <Link to="/policy/privacy-policy" className="footer-link">
-        Privacy Policy
-      </Link>
-    </li>
+   <li>
+  <a
+    href="https://dogwalkerbackend1.onrender.com/policies/privacy_policy.html"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="footer-link"
+  >
+    Privacy Policy
+  </a>
+</li>
 
-    <li>
-      <Link to="/policy/terms-and-conditions" className="footer-link">
-        Terms & Conditions
-      </Link>
-    </li>
+<li>
+  <a
+    href="https://dogwalkerbackend1.onrender.com/policies/terms_and_conditions.html"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="footer-link"
+  >
+    Terms & Conditions
+  </a>
+</li>
 
-    <li>
-      <Link to="/policy/cancellation-policy" className="footer-link">
-        Refund & Cancellation Policy
-      </Link>
-    </li>
+<li>
+  <a
+    href="https://dogwalkerbackend1.onrender.com/policies/cancellation_policy.html"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="footer-link"
+  >
+    Refund & Cancellation Policy
+  </a>
+</li>
   </ul>
 </motion.div>
 
