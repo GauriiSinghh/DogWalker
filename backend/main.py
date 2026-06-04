@@ -34,7 +34,7 @@ app.add_middleware(
 )
 
 # ===== HEALTH CHECK =====
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
     return {"status": "ok", "message": "Paws Pal Connect API is running"}
 
