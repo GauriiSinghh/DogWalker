@@ -347,7 +347,7 @@
    HERO  (box-behind-image bug fixed)
    ============================================================ */
 .zuppy .hero {
-  padding: clamp(32px, 5vw, 56px) 0 clamp(40px, 6vw, 72px);
+  padding: 120px;
   overflow: hidden;
 }
 
@@ -449,12 +449,7 @@
   object-position: center;
   display: block;
 } */ 
- .hero-visual img{
-  margin-top: 80px !important;
- }
- .hero-visual{
-  transform: translateY( 1 px);
- }
+ 
 .zuppy.hero-img {
   position: relative;
   margin-left: 50px;
@@ -1365,6 +1360,27 @@
 }
 
 @media (max-width: 576px) {
+  .zuppy .hero-grid {
+  display: flex;
+  flex-direction: column;
+}
+
+.zuppy .hero-content {
+  order: 2;
+}
+
+.zuppy .hero-image,
+.zuppy .hero-visual {
+  order: 1;
+}
+
+.zuppy .hero-visual img {
+  margin-top: 0 !important;
+}
+
+.zuppy .hero-content {
+  margin-top: 24px;
+}
   .zuppy .services-grid,
   .zuppy .trust-grid,
   .zuppy .footer-grid {
@@ -1396,7 +1412,11 @@
   .zuppy .nav-logo-img {
     height: 38px;
   }
+  .zuppy.mobile-cta{
+    display:none;
+  }
 }
+
 
 @media (prefers-reduced-motion: reduce) {
   .zuppy *,
