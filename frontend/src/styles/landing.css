@@ -1376,12 +1376,7 @@
     border-radius: 20px;
   }
 
-  .zuppy .hero-verified-badge {
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    width: calc(100% - 24px);
-    max-width: 320px;
-  }
+  
 
   .zuppy .hero-grid {
   display: flex;
@@ -1419,14 +1414,7 @@
     aspect-ratio: 1 / 1;
   }
 
-  .zuppy .hero-verified-badge {
-    flex-direction: row;
-    align-items: center;
-    left: 12px;
-    bottom: 12px;
-    max-width: calc(100% - 24px);
-    padding: 12px 14px;
-  }
+  
 
   .zuppy .hero-verified-text p {
     font-size: 0.8rem;
@@ -1506,15 +1494,6 @@
 @media (max-width: 768px) {
 
  
-  .hero-verified-badge {
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-
-    bottom: -40px !important; /* move below image */
-    width: 90%;
-    max-width: 320px;
-  }
-
 
   .hero-verified-text p {
     font-size: 14px !important;
@@ -1522,4 +1501,44 @@
   }
 
   
+}
+/* iPhone / Mobile Fix */
+@media (max-width: 768px) {
+
+  .zuppy .hero-image {
+    position: relative;
+    width: 100%;
+    margin-bottom: 70px;
+  }
+
+  .zuppy .hero-visual {
+    width: 100%;
+  }
+
+  .zuppy .hero-visual img {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 24px;
+  }
+
+  .zuppy .hero-verified-badge {
+    position: absolute;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+
+    bottom: -50px !important;
+
+    width: 85% !important;
+    max-width: 320px !important;
+
+    padding: 14px !important;
+    text-align: center;
+    z-index: 10;
+  }
+
+  .zuppy .hero-content {
+    margin-top: 50px;
+  }
 }
