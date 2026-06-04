@@ -125,38 +125,23 @@ function Footer({ onNav, onBook }) {
   <h4 className="footer-col-title">Company</h4>
 
   <ul className="footer-list">
-   <li>
-  <a
-    href="https://dogwalkerbackend1.onrender.com/policies/privacy-policy.html"
-    target="_blank"
-    rel="noopener noreferrer"
-    className="footer-link"
-  >
-    Privacy Policy
-  </a>
-</li>
+    <li>
+      <Link to="/policy/privacy-policy" className="footer-link">
+        Privacy Policy
+      </Link>
+    </li>
 
-<li>
-  <a
-    href="https://dogwalkerbackend1.onrender.com/policies/terms-and-conditions.html"
-    target="_blank"
-    rel="noopener noreferrer"
-    className="footer-link"
-  >
-    Terms & Conditions
-  </a>
-</li>
+    <li>
+      <Link to="/policy/terms-and-conditions" className="footer-link">
+        Terms & Conditions
+      </Link>
+    </li>
 
-<li>
-  <a
-    href="https://dogwalkerbackend1.onrender.com/policies/cancellation&refund-policy.html"
-    target="_blank"
-    rel="noopener noreferrer"
-    className="footer-link"
-  >
-    Refund & Cancellation Policy
-  </a>
-</li>
+    <li>
+      <Link to="/policy/cancellation-policy" className="footer-link">
+        Refund & Cancellation Policy
+      </Link>
+    </li>
   </ul>
 </motion.div>
 
