@@ -16,6 +16,7 @@ const pageTransition = {
 };
 
 function Login() {
+  
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
@@ -40,6 +41,7 @@ function Login() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+  
     if (!validateForm()) {
       setShowErrors(true);
       return;
@@ -69,7 +71,7 @@ function Login() {
 
       login(data.user, data.access_token);
       setSuccess("✅ Login successful! Redirecting...");
-      setTimeout(() => navigate(redirectTo, { replace: true }), 1200);
+    navigate(redirectTo, { replace: true });
     } catch (err) {
       console.error("❌ Login error:", err);
       setError(
