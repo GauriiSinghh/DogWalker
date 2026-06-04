@@ -347,7 +347,7 @@
    HERO  (box-behind-image bug fixed)
    ============================================================ */
 .zuppy .hero {
-  padding: 120px;
+  padding: 120px 20px 60px;
   overflow: hidden;
 }
 
@@ -450,11 +450,11 @@
   display: block;
 } */ 
  
-.zuppy.hero-img {
+.zuppy .hero-img {
   position: relative;
   margin-left: 50px;
 }
-.zuppy.hero-img img {
+.zuppy .hero-visual img {
   width: 100%;
   max-width: 540px;
   max-height: 540px;
@@ -1360,6 +1360,29 @@
 }
 
 @media (max-width: 576px) {
+
+  .zuppy .hero {
+    padding: 90px 16px 40px;
+  }
+
+  .zuppy .hero-image {
+    width: 100%;
+    margin: 0;
+  }
+
+  .zuppy .hero-visual img {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 20px;
+  }
+
+  .zuppy .hero-verified-badge {
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: calc(100% - 24px);
+    max-width: 320px;
+  }
+
   .zuppy .hero-grid {
   display: flex;
   flex-direction: column;
@@ -1480,3 +1503,23 @@
   transition: background 0.2s ease, color 0.2s ease;
 }
 .success-close:hover { background: #efe6da; color: var(--dark, #1f1f1f); }
+@media (max-width: 768px) {
+
+ 
+  .hero-verified-badge {
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+
+    bottom: -40px !important; /* move below image */
+    width: 90%;
+    max-width: 320px;
+  }
+
+
+  .hero-verified-text p {
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+  }
+
+  
+}
