@@ -1,0 +1,1456 @@
+/* ============ Zuppy · Landing (premium polish v2) ============ */
+
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=Inter:wght@400;500;600;700&display=swap");
+
+.zuppy {
+  --primary: #ff7a18;
+  --primary-dark: #e8680f;
+  --secondary: #ffb347;
+  --dark: #141414;
+  --dark-soft: #2a2a2a;
+  --light: #fffaf5;
+  --surface: #ffffff;
+  --muted: #6b6560;
+  --muted-light: #9a928a;
+  --green: #22c55e;
+  --green-hover: #16a34a;
+  --border: rgba(20, 20, 20, 0.08);
+  --shadow-xs: 0 1px 2px rgba(20, 20, 20, 0.04);
+  --shadow-sm: 0 4px 16px rgba(20, 20, 20, 0.06);
+  --shadow-md: 0 12px 40px rgba(20, 20, 20, 0.08);
+  --shadow-lg: 0 24px 64px rgba(255, 122, 24, 0.12);
+  --radius: 20px;
+  --radius-lg: 28px;
+  --nav-height: 72px;
+  
+
+  /* Unified spacing system */
+  --container-w: 1200px;
+  --container-pad: clamp(20px, 4vw, 40px);
+  --section-y: clamp(40px, 4vw, 64px);
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  font-family: "DM Sans", "Inter", system-ui, sans-serif;
+  background: var(--light);
+  color: var(--dark);
+  line-height: 1.6;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+.zuppy * {
+  box-sizing: border-box;
+}
+
+.zuppy img {
+  max-width: 100%;
+  display: block;
+}
+
+.zuppy a {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* —— Unified container —— */
+.zuppy .container {
+  width: 100%;
+  max-width: var(--container-w);
+  margin-inline: auto;
+  padding-inline: var(--container-pad);
+}
+
+/* —— Section spacing (consistent rhythm) —— */
+.zuppy section {
+  padding-block:48px;
+  scroll-margin-top: calc(var(--nav-height) + 16px);
+}
+
+/* Tighten the gap between the hero and the first content section */
+.zuppy .hero + section {
+  padding-top: clamp(32px, 4vw, 56px);
+}
+
+.zuppy .section-alt {
+  background: linear-gradient(180deg, #fff8f2 0%, var(--light) 100%);
+}
+
+.zuppy .section-title {
+  text-align: center;
+  font-size: clamp(1.75rem, 4vw, 2.35rem);
+  margin-bottom: 12px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  color: var(--dark);
+}
+
+.zuppy .section-subtitle {
+  text-align: center;
+  color: var(--muted);
+  max-width: 640px;
+  margin: 0 auto clamp(28px, 4vw, 40px);
+  font-size: clamp(0.98rem, 2vw, 1.06rem);
+  line-height: 1.65;
+}
+
+.zuppy .body-text {
+  color: var(--muted);
+  font-size: 1.02rem;
+  line-height: 1.65;
+  text-align: left;
+}
+
+.zuppy .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--primary);
+  margin-bottom: 14px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 122, 24, 0.1);
+  border: 1px solid rgba(255, 122, 24, 0.15);
+}
+
+/* ============================================================
+   HEADER / NAVBAR  (rebuilt)
+   ============================================================ */
+.zuppy .site-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 1000;
+  background: rgba(255, 250, 245, 0.72);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  border-bottom: 1px solid transparent;
+  transition: background 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.zuppy .site-header--scrolled {
+  background: rgba(255, 255, 255, 0.9);
+  border-bottom-color: var(--border);
+  box-shadow: var(--shadow-xs);
+}
+
+/* The bar itself spans full width; the inner element handles max-width */
+.zuppy .navbar {
+  width: 100%;
+}
+
+.zuppy .nav-inner {
+  height: var(--nav-height);
+  width: 100%;
+  max-width: var(--container-w);
+  margin-inline: auto;
+  padding-inline: var(--container-pad);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+/* Left — logo */
+.zuppy .nav-logo {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.zuppy .nav-logo:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.zuppy .nav-logo-img {
+  height: 55px;
+  width: auto;
+  object-fit: contain;
+}
+
+/* Center — links */
+.zuppy .nav-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-inline: auto; /* centers the link cluster */
+}
+
+.zuppy .nav-link-btn {
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+  color: var(--dark-soft);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 9px 14px;
+  border-radius: 10px;
+  position: relative;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.zuppy .nav-link-btn:hover {
+  color: var(--primary);
+  background: rgba(255, 122, 24, 0.07);
+}
+
+.zuppy .nav-link-btn.active {
+  color: var(--primary);
+}
+
+.zuppy .nav-link-btn.active::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 50%;
+  height: 3px;
+  background: var(--primary);
+  border-radius: 999px;
+}
+
+/* Right — actions */
+.zuppy .nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* Actions block inside the mobile drawer (hidden on desktop) */
+.zuppy .nav-links-actions {
+  display: none;
+}
+
+/* —— Hamburger —— */
+.zuppy .nav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 42px;
+  height: 42px;
+  padding: 8px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.zuppy .nav-toggle:hover {
+  background: rgba(255, 122, 24, 0.06);
+  border-color: rgba(255, 122, 24, 0.2);
+}
+
+.zuppy .nav-toggle span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: var(--dark);
+  border-radius: 2px;
+  margin: 0 auto;
+  transition: transform 0.25s var(--ease-out), opacity 0.2s ease;
+}
+
+.zuppy .nav-toggle[aria-expanded="true"] span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+.zuppy .nav-toggle[aria-expanded="true"] span:nth-child(2) {
+  opacity: 0;
+}
+.zuppy .nav-toggle[aria-expanded="true"] span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
+.zuppy .nav-backdrop {
+  display: none;
+}
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+.zuppy .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 15px 28px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+  transition: transform 0.22s var(--ease-out), box-shadow 0.22s var(--ease-out),
+    background 0.22s ease, border-color 0.22s ease, color 0.22s ease;
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.zuppy .btn-primary {
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+.zuppy .btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.zuppy .btn-whatsapp {
+  background: var(--green);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(34, 197, 94, 0.25);
+}
+.zuppy .btn-whatsapp:hover {
+  background: var(--green-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(34, 197, 94, 0.35);
+}
+
+.zuppy .btn-outline {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--dark);
+  box-shadow: var(--shadow-xs);
+}
+.zuppy .btn-outline:hover {
+  border-color: rgba(255, 122, 24, 0.35);
+  color: var(--primary-dark);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Compact nav buttons so they fit the 72px bar perfectly */
+.zuppy .btn-nav-cta {
+  padding: 10px 18px;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+/* ============================================================
+   HERO  (box-behind-image bug fixed)
+   ============================================================ */
+.zuppy .hero {
+  padding: clamp(32px, 5vw, 56px) 0 clamp(40px, 6vw, 72px);
+  overflow: hidden;
+}
+
+.zuppy .hero-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: clamp(32px, 5vw, 64px);
+}
+
+.zuppy .hero-content {
+  display: flex;
+  flex-direction: column;
+  max-width: 560px;
+}
+
+.zuppy .hero h1 {
+  font-size: clamp(3rem, 7vw, 5rem);
+  line-height: 0.95;
+  font-weight: 800;
+  margin: 0 0 8px;
+  letter-spacing: -0.02em;
+  color: var(--dark);
+}
+
+.zuppy .hero-tagline {
+  display: block;
+  color: var(--primary);
+  font-size: 0.42em;
+  font-weight: 800;
+  margin-top: 12px;
+  letter-spacing: -0.01em;
+}
+
+.zuppy .hero-lead {
+  font-size: clamp(1.1rem, 2.5vw, 1.5rem);
+  font-weight: 700;
+  margin: 14px 0 10px;
+  letter-spacing: -0.02em;
+  color: var(--dark-soft);
+}
+
+.zuppy .hero-intro {
+  color: var(--muted);
+  font-size: 1.02rem;
+  line-height: 1.6;
+  margin: 0 0 24px;
+  max-width: 480px;
+}
+
+.zuppy .hero-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+
+.zuppy .trust-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+
+.zuppy .trust-row span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* THE FIX: hero-image is just a positioning wrapper, no background */
+/* .zuppy .hero-image {
+  justify-self: center;
+  width: 100%;
+}
+
+/* Single, clean definition — no conflicting width/height, no orange box */
+/* .zuppy .hero-visual {
+  position: relative;
+  width: 100%;
+  max-width: 580px;
+  aspect-ratio: 4 / 3;          /* fixes layout shift + broken sizing */
+  /* margin-inline: auto;
+  border-radius: var(--radius-lg);
+  overflow: hidden;             /* clips the scale animation cleanly */
+  /* box-shadow: var(--shadow-md);
+  background: #f3ece4;          /* neutral placeholder, hidden once image loads */
+/* } */ */ */ */
+
+/* .zuppy .hero-visual img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+} */ */
+.zuppy.hero-img {
+  position: relative;
+  margin-left: 50px;
+}
+.zuppy.hero-img img {
+  width: 100%;
+  max-width: 540px;
+  max-height: 540px;
+  object-fit: cover;
+  border-radius: 32px;
+  box-shadow: var(--shadow);
+  will-change: transform;
+}
+
+.zuppy .hero-verified-badge {
+  position: absolute;
+  bottom: -20px;
+  left: -100px;
+  background: #fff;
+  padding: 18px;
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  width: 240px;
+  will-change: transform;
+}
+.floating-card strong {
+  color: var(--primary);
+  font-size: 1.3rem;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+}
+
+.card {
+  background: #fff;
+  border-radius: var(--radius);
+  padding: 30px;
+  box-shadow: var(--shadow);
+  height: 100%;
+  transition: box-shadow 0.35s ease, transform 0.35s ease;
+  will-change: transform;
+}
+.card h3 {
+  margin: 16px 0;
+  font-size: 1.25rem;
+}
+
+.icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 122, 24, 0.12);
+  font-size: 1.5rem;
+}
+
+/* Verified badge */
+/* .zuppy .hero-verified-badge {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+  z-index: 20;
+}
+
+.zuppy .hero-verified-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(255, 122, 24, 0.12);
+  color: var(--primary);
+  font-size: 1.1rem;
+} */
+
+.zuppy .hero-verified-text strong {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+
+.zuppy .hero-verified-text p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* ============================================================
+   PROBLEM / SOLUTION
+   ============================================================ */
+.zuppy .split-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+
+.zuppy .block-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted-light);
+  margin-bottom: 12px;
+}
+
+.zuppy .block-label--accent {
+  color: var(--primary);
+}
+
+.zuppy .problem-block h3,
+.zuppy .solution-block h3 {
+  font-size: 1.2rem;
+  margin-bottom: 14px;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+
+.zuppy .styled-list {
+  list-style: none;
+  margin-bottom: 16px;
+  padding: 0;
+}
+
+.zuppy .styled-list.arrow-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.98rem;
+  line-height: 1.55;
+}
+
+.zuppy .list-arrow {
+  flex-shrink: 0;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.zuppy .styled-list li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.98rem;
+  line-height: 1.55;
+}
+
+.zuppy .styled-list.ordered {
+  counter-reset: step;
+}
+
+.zuppy .styled-list.ordered li {
+  counter-increment: step;
+  padding-left: 40px;
+  position: relative;
+}
+
+.zuppy .styled-list.ordered li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 10px;
+  width: 26px;
+  height: 26px;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  color: #fff;
+  border-radius: 50%;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.zuppy .problem-punchline,
+.zuppy .solution-result {
+  font-size: 0.98rem;
+  line-height: 1.6;
+  color: var(--dark-soft);
+}
+
+/* ============================================================
+   CARDS & GRIDS
+   ============================================================ */
+.zuppy .card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+}
+
+.zuppy .card,
+.zuppy .step,
+.zuppy .coverage-card,
+.zuppy .roadmap-card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 28px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xs);
+  transition: transform 0.35s var(--ease-out), box-shadow 0.35s var(--ease-out),
+    border-color 0.35s ease;
+}
+
+.zuppy .card:hover,
+.zuppy .step:hover,
+.zuppy .coverage-card:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-md);
+  border-color: rgba(255, 122, 24, 0.12);
+}
+
+.zuppy .card h3 {
+  margin: 14px 0 8px;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+}
+
+.zuppy .card p,
+.zuppy .step p,
+.zuppy .coverage-card p {
+  color: var(--muted);
+  font-size: 0.96rem;
+  line-height: 1.6;
+}
+
+.zuppy .icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 122, 24, 0.1);
+  font-size: 1.4rem;
+}
+
+.zuppy .steps {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+}
+
+.zuppy .step {
+  text-align: center;
+  padding: 26px 18px;
+}
+
+.zuppy .step-number {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 16px;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  color: #fff;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  box-shadow: 0 6px 16px rgba(255, 122, 24, 0.25);
+}
+
+.zuppy .step h3 {
+  font-size: 1rem;
+  margin-bottom: 8px;
+  letter-spacing: -0.02em;
+}
+
+/* ============================================================
+   TRUST
+   ============================================================ */
+.zuppy .trust-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.zuppy .trust-item {
+  text-align: center;
+  padding: 26px 20px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xs);
+  transition: transform 0.3s var(--ease-out), box-shadow 0.3s ease;
+}
+
+.zuppy .trust-item:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-sm);
+}
+
+.zuppy .trust-check {
+  font-size: 1.35rem;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.zuppy .trust-item h3 {
+  font-size: 0.98rem;
+  margin-bottom: 6px;
+  letter-spacing: -0.02em;
+}
+
+.zuppy .trust-item p {
+  font-size: 0.88rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* ============================================================
+   COMPARISON
+   ============================================================ */
+.zuppy .comparison-wrapper {
+  max-width: 780px;
+  margin: auto;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.zuppy .comparison-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--surface);
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.zuppy .comparison-table th,
+.zuppy .comparison-table td {
+  padding: 18px 22px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.94rem;
+}
+
+.zuppy .comparison-table thead th {
+  background: #f8f6f3;
+  font-weight: 700;
+  font-size: 0.88rem;
+  letter-spacing: -0.01em;
+}
+
+.zuppy .comparison-table thead th.highlight {
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  color: #fff;
+}
+
+.zuppy .comparison-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.zuppy .comparison-table td {
+  color: var(--muted);
+}
+
+.zuppy .comparison-table td:last-child {
+  color: var(--dark);
+  font-weight: 600;
+}
+
+/* ============================================================
+   SERVICES
+   ============================================================ */
+.zuppy .services-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+}
+
+.zuppy .roadmap-card {
+  padding: 26px 20px;
+  text-align: center;
+  position: relative;
+}
+
+.zuppy .roadmap-card--live {
+  border-color: rgba(255, 122, 24, 0.25);
+  background: linear-gradient(160deg, #ffffff 0%, #fff7ef 100%);
+  box-shadow: var(--shadow-sm);
+}
+
+.zuppy .roadmap-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+}
+
+.zuppy .roadmap-badge--soon {
+  background: rgba(20, 20, 20, 0.06);
+  color: var(--muted);
+}
+
+.zuppy .roadmap-icon {
+  font-size: 1.85rem;
+  margin-bottom: 12px;
+}
+
+.zuppy .roadmap-card h3 {
+  font-size: 1.05rem;
+  margin-bottom: 6px;
+  letter-spacing: -0.02em;
+}
+
+.zuppy .roadmap-card p {
+  font-size: 0.86rem;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ============================================================
+   COVERAGE
+   ============================================================ */
+.zuppy .coverage-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+}
+
+.zuppy .coverage-card {
+  background: linear-gradient(160deg, #ffffff 0%, #fff6ee 100%);
+}
+
+.zuppy .coverage-card h3 {
+  font-size: 1.1rem;
+  margin-bottom: 8px;
+  letter-spacing: -0.02em;
+}
+
+/* ============================================================
+   TESTIMONIALS
+   ============================================================ */
+.zuppy .testimonial p {
+  margin-bottom: 14px;
+  color: var(--muted);
+  font-size: 0.98rem;
+  line-height: 1.65;
+  font-style: italic;
+}
+
+.zuppy .testimonial strong {
+  font-size: 0.88rem;
+  color: var(--dark-soft);
+  font-weight: 600;
+}
+
+/* ============================================================
+   FAQ
+   ============================================================ */
+.zuppy .faq {
+  max-width: 720px;
+  margin: auto;
+}
+
+.zuppy .faq-item {
+  background: var(--surface);
+  margin-bottom: 10px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.zuppy .faq-item:hover {
+  border-color: rgba(255, 122, 24, 0.15);
+}
+
+.zuppy .faq-question {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 22px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.98rem;
+  font-weight: 600;
+  color: var(--dark);
+  font-family: inherit;
+  letter-spacing: -0.02em;
+  transition: color 0.2s ease;
+}
+
+.zuppy .faq-question:hover {
+  color: var(--primary);
+}
+
+.zuppy .chevron {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--primary);
+  border-bottom: 2px solid var(--primary);
+  transform: rotate(45deg);
+  transition: transform 0.28s var(--ease-out);
+  margin-top: 2px;
+}
+
+.zuppy .faq-question[aria-expanded="true"] .chevron {
+  transform: rotate(-135deg);
+  margin-top: 6px;
+}
+
+.zuppy .faq-answer p {
+  padding: 0 22px 18px;
+  color: var(--muted);
+  font-size: 0.94rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ============================================================
+   CTA
+   ============================================================ */
+.zuppy .cta-banner {
+  background: linear-gradient(135deg, #ff7a18 0%, #ff9f43 50%, #ffb347 100%);
+  border-radius: var(--radius-lg);
+  padding: clamp(40px, 6vw, 56px) clamp(28px, 5vw, 48px);
+  color: #fff;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+  position: relative;
+  overflow: hidden;
+}
+
+.zuppy .cta-banner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.15), transparent 50%);
+  pointer-events: none;
+}
+
+.zuppy .cta-banner h2 {
+  font-size: clamp(1.75rem, 4vw, 2.4rem);
+  margin-bottom: 12px;
+  letter-spacing: -0.03em;
+  position: relative;
+}
+
+.zuppy .cta-banner p {
+  max-width: 520px;
+  margin: 0 auto 24px;
+  font-size: 1.02rem;
+  line-height: 1.6;
+  opacity: 0.95;
+  position: relative;
+}
+
+.zuppy .cta-banner .btn {
+  position: relative;
+}
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+.zuppy .site-footer {
+  padding: clamp(48px, 6vw, 64px) 0 28px;
+  background: linear-gradient(180deg, #1a1a1a 0%, #141414 100%);
+  color: rgba(255, 255, 255, 0.75);
+  margin-top: 0;
+}
+
+.zuppy .footer-grid {
+  display: grid;
+  grid-template-columns: 1.5fr repeat(4, 1fr);
+  gap: 3rem;
+  padding-bottom: clamp(32px, 4vw, 44px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.zuppy .footer-col-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.45);
+  margin-bottom: 18px;
+}
+
+.zuppy .footer-logo-btn {
+  display: inline-flex;
+  padding: 0;
+  margin: 0 0 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.zuppy .footer-logo-btn:hover {
+  opacity: 0.9;
+}
+
+.zuppy .footer-logo-img {
+  height: 48px;
+  width: auto;
+  max-width: 200px;
+  object-fit: contain;
+  opacity: 0.95;
+  filter: brightness(0) invert(1);
+}
+
+.zuppy .footer-tagline {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  max-width: 280px;
+  margin: 0 0 20px;
+}
+
+.zuppy .footer-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.zuppy .footer-list li {
+  margin-bottom: 10px;
+  font-size: 0.92rem;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.5;
+}
+
+.zuppy .footer-link {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.92rem;
+  color: rgba(255, 255, 255, 0.65);
+  padding: 0;
+  display: inline-block;
+  transition: color 0.2s ease;
+  text-align: left;
+}
+
+.zuppy .footer-link:hover,
+.zuppy .footer-list a.footer-link:hover {
+  color: #fff;
+}
+
+.zuppy .footer-link--cta {
+  color: var(--secondary);
+  font-weight: 600;
+}
+
+.zuppy .footer-link--cta:hover {
+  color: #fff;
+}
+
+.zuppy .footer-social {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.zuppy .footer-social-link {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.95rem;
+  transition: background 0.22s ease, color 0.22s ease, border-color 0.22s ease;
+}
+
+.zuppy .footer-social-link:hover {
+  color: #fff;
+  background: var(--social-brand, var(--primary));
+  border-color: transparent;
+}
+
+.zuppy .footer-bottom {
+  padding-top: 24px;
+  text-align: center;
+}
+
+.zuppy .footer-powered {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.zuppy .footer-powered-label {
+  font-weight: 500;
+}
+
+.zuppy .footer-powered-brand {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: -0.01em;
+}
+
+.zuppy .copyright {
+  margin: 0;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.32);
+  line-height: 1.5;
+  border: none;
+  padding: 0;
+}
+
+/* ============================================================
+   MOBILE CTA
+   ============================================================ */
+.zuppy .mobile-cta {
+  display: none;
+}
+
+.zuppy.has-mobile-cta {
+  padding-bottom: 0;
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+/* Laptop — hide center links earlier so the bar never crowds */
+@media (max-width: 1024px) {
+  .zuppy .nav-links {
+    display: none;
+  }
+  .zuppy .nav-toggle {
+    display: flex;
+  }
+}
+
+@media (max-width: 992px) {
+  .zuppy .hero-grid,
+  .zuppy .card-grid,
+  .zuppy .split-grid,
+  .zuppy .coverage-grid,
+  .zuppy .footer-grid,
+  .zuppy .steps {
+    grid-template-columns: 1fr;
+  }
+
+  .zuppy .trust-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .zuppy .services-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .zuppy .footer-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .zuppy .footer-brand {
+    grid-column: 1 / -1;
+  }
+
+  /* Hide desktop actions; they move into the drawer */
+  .zuppy .nav-actions-desktop {
+    display: none;
+  }
+
+  /* Mobile drawer */
+  .zuppy .nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    top: var(--nav-height);
+    background: rgba(20, 20, 20, 0.4);
+    backdrop-filter: blur(4px);
+    border: none;
+    cursor: pointer;
+    z-index: 999;
+  }
+
+  .zuppy .nav-links {
+    display: none;
+    position: fixed;
+    top: calc(var(--nav-height) + 8px);
+    left: 4%;
+    right: 4%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 14px;
+    margin-inline: 0;
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(20px);
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-md);
+    z-index: 1001;
+  }
+
+  .zuppy .nav-links.is-open {
+    display: flex;
+  }
+
+  .zuppy .nav-link-btn {
+    padding: 13px 16px;
+    border-radius: 10px;
+    font-size: 0.98rem;
+  }
+
+  .zuppy .nav-link-btn:hover {
+    background: rgba(255, 122, 24, 0.08);
+  }
+
+  /* Actions inside the drawer */
+  .zuppy .nav-links-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .zuppy .nav-links-actions .btn-nav-cta {
+    width: 100%;
+    justify-content: center;
+    padding: 13px 18px;
+    font-size: 0.98rem;
+  }
+
+  .zuppy .hero-content {
+    max-width: none;
+    text-align: center;
+    align-items: center;
+    order: 2;
+  }
+
+  .zuppy .hero-image {
+    order: 1;
+  }
+
+  .zuppy .hero-intro {
+    margin-inline: auto;
+  }
+
+  .zuppy .hero-buttons,
+  .zuppy .trust-row {
+    justify-content: center;
+  }
+
+  .zuppy .hero-visual {
+    max-width: 520px;
+    aspect-ratio: 4 / 3;
+  }
+
+  .zuppy.has-mobile-cta {
+    padding-bottom: 88px;
+  }
+
+  .zuppy .mobile-cta {
+    position: fixed;
+    bottom: 16px;
+    left: 16px;
+    right: 16px;
+    display: block;
+    z-index: 900;
+  }
+
+  .zuppy .mobile-cta .btn {
+    width: 100%;
+    box-shadow: var(--shadow-md);
+  }
+}
+
+@media (max-width: 576px) {
+  .zuppy .services-grid,
+  .zuppy .trust-grid,
+  .zuppy .footer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .zuppy .steps {
+    grid-template-columns: 1fr;
+  }
+
+  .zuppy .hero-visual {
+    max-width: 100%;
+    aspect-ratio: 1 / 1;
+  }
+
+  .zuppy .hero-verified-badge {
+    flex-direction: row;
+    align-items: center;
+    left: 12px;
+    bottom: 12px;
+    max-width: calc(100% - 24px);
+    padding: 12px 14px;
+  }
+
+  .zuppy .hero-verified-text p {
+    font-size: 0.8rem;
+  }
+
+  .zuppy .nav-logo-img {
+    height: 38px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zuppy *,
+  .zuppy *::before,
+  .zuppy *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================================
+   AUTH / MODAL UTILITIES (unchanged)
+   ============================================================ */
+.auth-close-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 6;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--dark, #1f1f1f);
+  font-size: 0.95rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  transition: transform 0.25s ease, background 0.2s ease, color 0.2s ease;
+}
+.auth-close-btn:hover {
+  background: #fff;
+  color: var(--primary, #ff7a18);
+  transform: rotate(90deg);
+}
+
+.booking-card { position: relative; }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--muted, #6f6f6f);
+  border: none;
+}
+.btn-ghost:hover { color: var(--dark, #1f1f1f); }
+
+.success-modal { position: relative; }
+.success-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  background: #f5efe8;
+  color: var(--muted, #6f6f6f);
+  display: grid;
+  place-items: center;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.success-close:hover { background: #efe6da; color: var(--dark, #1f1f1f); }

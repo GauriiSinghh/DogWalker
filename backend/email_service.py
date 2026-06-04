@@ -4,34 +4,26 @@ import resend
 
 load_dotenv()
 
-# Resend configuration (all via environment variables)
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
-# The "from" address. Must be a Resend-verified domain, OR use the
-# Resend test sender "onboarding@resend.dev" until your domain is verified.
 FROM_EMAIL = os.getenv("FROM_EMAIL", "Paws Pal Connect <onboarding@resend.dev>")
 
-# Configure the Resend SDK with the API key
 resend.api_key = RESEND_API_KEY
 
-
 def send_booking_email(apartment, name, mobile, flatNo, address):
-    """Builds and sends the booking notification email to the admin via Resend."""
+    """Send booking notification to ADMIN"""
     print("📧 send_booking_email function started")
     print("FROM_EMAIL  =", FROM_EMAIL)
     print("ADMIN_EMAIL =", ADMIN_EMAIL)
 
-    # Fail clearly (and early) if config is missing — but never crash the booking
     if not RESEND_API_KEY:
-        print("❌ Email NOT sent: RESEND_API_KEY is missing in environment variables.")
+        print("❌ Email NOT sent: RESEND_API_KEY is missing.")
         return
     if not ADMIN_EMAIL:
-        print("❌ Email NOT sent: ADMIN_EMAIL is missing in environment variables.")
+        print("❌ Email NOT sent: ADMIN_EMAIL is missing.")
         return
 
-    subject = f"Booking from Apartment {apartment}"
-
-    # Same notification content as before
+    subject = f"🐾 New Booking from Apartment {apartment}"
     body = (
         f"🏢 Apartment      : {apartment}\n"
         f"👤 Customer Name  : {name}\n"
@@ -39,6 +31,8 @@ def send_booking_email(apartment, name, mobile, flatNo, address):
         f"🏠 Flat/Villa No  : {flatNo}\n\n"
         "📍 ADDRESS:\n"
         f"{address}\n\n"
+       
+      
     )
 
     try:
@@ -49,8 +43,45 @@ def send_booking_email(apartment, name, mobile, flatNo, address):
             "text": body,
         }
         response = resend.Emails.send(params)
-        print(f"✅ Email sent to {ADMIN_EMAIL} | Resend response: {response}")
+        print(f"✅ Admin email sent | Resend response: {response}")
     except Exception as e:
-        # Log clearly so failures are visible in Render logs,
-        # but do NOT raise — booking must still succeed.
-        print(f"❌ Email sending failed via Resend: {repr(e)}")
+        print(f"❌ Admin email sending failed: {repr(e)}")
+
+
+def send_user_confirmation_email(user_name, user_email, apartment, flatNo, address):
+    """Send booking confirmation to USER"""
+    print(f"📧 send_user_confirmation_email function started for {user_email}")
+
+    if not RESEND_API_KEY:
+        print("❌ User confirmation email NOT sent: RESEND_API_KEY is missing.")
+        return
+    if not user_email:
+        print("❌ User confirmation email NOT sent: user_email is missing.")
+        return
+
+    subject = "🐾 Your Paws Pal Connect Booking Confirmed!"
+    body = (
+        f"Hi {user_name},\n\n"
+        f"Thank you for booking with Paws Pal Connect! 🐶\n\n"
+        f"Here's a summary of your booking:\n\n"
+        f"Apartment: {apartment}\n"
+        f"Flat/Villa No: {flatNo}\n"
+        f"Address: {address}\n\n"
+        f"A verified walker has been notified and will arrive at your doorstep within 10 minutes.\n\n"
+        f"You'll receive live updates about the walk.\n\n"
+        f"Questions? Contact us at zuppy@pawspalconnect.com\n\n"
+        f"Happy walking! 🐾\n"
+        f"— Paws Pal Connect Team"
+    )
+
+    try:
+        params = {
+            "from": FROM_EMAIL,
+            "to": [user_email],
+            "subject": subject,
+            "text": body,
+        }
+        response = resend.Emails.send(params)
+        print(f"✅ User confirmation email sent to {user_email} | Resend response: {response}")
+    except Exception as e:
+        print(f"❌ User confirmation email sending failed: {repr(e)}")

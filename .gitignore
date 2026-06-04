@@ -1,6 +1,7 @@
 node_modules/
+.env
+backend/.env
 venv/
 __pycache__/
-.env
 dist/
 .vscode/

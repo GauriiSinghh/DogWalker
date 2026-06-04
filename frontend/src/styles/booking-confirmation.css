@@ -1,0 +1,41 @@
+.booking-summary {
+  background: #fff8f2;
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.booking-summary dt {
+  font-weight: 700;
+  color: var(--dark);
+  margin-top: 10px;
+}
+
+.booking-summary dt:first-child {
+  margin-top: 0;
+}
+
+.booking-summary dd {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.confirmation-email {
+  font-size: 0.9rem;
+  color: var(--green);
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+.btn-done-link {
+  display: block;
+  width: 100%;
+  text-align: center;
+}
+.success-modal {
+  background: white !important;
+  padding: 0 !important;
+  border-radius: 20px;
+}

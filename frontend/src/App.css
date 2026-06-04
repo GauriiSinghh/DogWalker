@@ -892,3 +892,277 @@ footer {
     left: -40px;
   }
 }
+/* ===== CUSTOM SELECT DROPDOWN ===== */
+.booking-form select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff7a18' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 20px;
+  padding-right: 42px;
+  cursor: pointer;
+}
+
+.booking-form select option {
+  color: var(--dark);
+}
+
+.booking-form select option[value=""] {
+  color: #bbab9b;
+}
+
+/* ===== CHOICE BUTTONS (BookingChoice page) ===== */
+.choice-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  padding: 32px 34px;
+}
+
+.choice-btn {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 28px;
+  border: 2px solid transparent;
+  border-radius: 20px;
+  background: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.3s ease;
+  text-align: left;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.choice-btn-primary {
+  border-color: var(--primary);
+  background: linear-gradient(145deg, #ffffff, #fff4eb);
+}
+
+.choice-btn-primary:hover {
+  box-shadow: 0 12px 32px rgba(255, 122, 24, 0.25);
+}
+
+.choice-btn-secondary {
+  border-color: var(--primary);
+  background: linear-gradient(145deg, #ffffff, #fff4eb);
+}
+
+.choice-btn-secondary:hover {
+  border-color: var(--primary);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+}
+
+.choice-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.choice-icon {
+  width: 60px;
+  height: 60px;
+  min-width: 60px;
+  border-radius: 16px;
+  background: rgba(255, 122, 24, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  color: var(--primary);
+}
+
+.choice-content h3 {
+  margin: 0 0 6px;
+  font-size: 1.15rem;
+  color: var(--dark);
+}
+
+.choice-content p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+/* ===== AUTH CARD WIDE ===== */
+.auth-card-wide {
+  max-width: 580px;
+}
+
+/* ===== FOOTER ZUPPY ===== */
+.footer-zuppy {
+  text-align: center;
+  padding: 20px 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  margin-bottom: 20px;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.footer-zuppy strong {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+/* ===== REDUCE SECTION SPACING ===== */
+section {
+  padding: 70px 0; /* Reduced from 90px */
+}
+
+/* ===== MOBILE RESPONSIVE ===== */
+@media (max-width: 768px) {
+  section {
+    padding: 50px 0; /* Further reduced on mobile */
+  }
+
+  .choice-buttons {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .choice-btn {
+    padding: 24px;
+  }
+
+  .booking-form select {
+    background-size: 18px;
+    padding-right: 40px;
+  }
+
+  .auth-card-wide {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  section {
+    padding: 40px 0;
+  }
+
+  .choice-btn {
+    gap: 14px;
+    padding: 20px;
+  }
+
+  .choice-icon {
+    width: 50px;
+    height: 50px;
+    font-size: 1.5rem;
+  }
+
+  .choice-content h3 {
+    font-size: 1rem;
+  }
+
+  .choice-content p {
+    font-size: 0.85rem;
+  }
+}
+/* ===== SUCCESS MODAL ===== */
+.success-backdrop {
+  position: fixed; inset: 0; z-index: 2000;
+  background: rgba(20, 12, 4, 0.55);
+  backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.success-modal {
+  width: 100%; max-width: 460px;
+  background: #fff; border-radius: var(--radius);
+  box-shadow: 0 30px 80px rgba(0,0,0,0.25);
+  padding: 36px 30px 30px; text-align: center;
+  max-height: 92vh; overflow-y: auto;
+}
+.success-check {
+  width: 84px; height: 84px; margin: 0 auto 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #25d366, #1ea952);
+  display: grid; place-items: center;
+  color: #fff; font-size: 2rem;
+  box-shadow: 0 10px 30px rgba(37,211,102,0.4);
+}
+.success-modal h2 { font-size: 1.5rem; margin-bottom: 6px; }
+.success-sub { color: var(--muted); margin-bottom: 22px; }
+.success-details {
+  background: #fffaf5; border: 1px solid #f0e4d8;
+  border-radius: 16px; padding: 16px 18px; margin-bottom: 16px; text-align: left;
+}
+.success-row {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 7px 0; font-size: 0.95rem;
+  border-bottom: 1px dashed rgba(0,0,0,0.06);
+}
+.success-row:last-child { border-bottom: none; }
+.success-row span { color: var(--muted); }
+.success-email {
+  display: flex; align-items: center; gap: 10px;
+  background: #e9f7ef; color: #1e7e34;
+  padding: 12px 14px; border-radius: 12px; font-size: 0.9rem;
+  text-align: left; margin-bottom: 16px;
+}
+.success-steps { text-align: left; margin-bottom: 22px; }
+.success-steps-title { font-weight: 700; margin-bottom: 8px; }
+.success-steps ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 0.92rem; }
+.success-steps li { margin-bottom: 5px; }
+.success-actions { display: flex; flex-direction: column; gap: 10px; }
+.success-actions .btn { width: 100%; }
+
+/* ===== FOOTER ZOPPI ===== */
+.footer-zoppi {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  flex-wrap: wrap;
+  padding: 20px 0; margin-bottom: 16px;
+  border-top: 1px solid rgba(0,0,0,0.06);
+  color: var(--muted); font-size: 0.95rem;
+}
+
+@media (max-width: 480px) {
+  .success-modal { padding: 28px 20px 24px; }
+  .success-check { width: 70px; height: 70px; font-size: 1.6rem; }
+  .success-modal h2 { font-size: 1.25rem; }
+}
+
+/* —— Auth: back to home —— */
+.auth-page-wrap {
+  position: relative;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.auth-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  width: 100%;
+  max-width: 520px;
+  margin-bottom: 16px;
+  padding: 8px 4px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--muted);
+  transition: color 0.2s ease, gap 0.2s ease;
+}
+
+.auth-back-link:hover {
+  color: var(--primary);
+  gap: 10px;
+}
+
+.auth-back-link svg {
+  font-size: 0.85rem;
+}
+
+.auth-card-wide + .auth-back-link,
+.auth-page-wrap .auth-back-link {
+  max-width: 580px;
+}
+
+@media (max-width: 480px) {
+  .auth-back-link {
+    margin-bottom: 12px;
+    font-size: 0.85rem;
+  }
+}
