@@ -9,6 +9,9 @@ import Login from "./pages/Login.jsx";
 import Signup from "./pages/Signup.jsx";
 import BookingChoice from "./pages/BookingChoice.jsx";
 import PolicyPage from "./pages/PolicyPage.jsx";
+import PrivacyPolicy from "./pages/PrivacyPolicy.jsx";
+import TermsConditions from "./pages/TermsConditions.jsx";
+import RefundCancellationPolicy from "./pages/RefundCancellationPolicy.jsx";
 
 function App() {
   const location = useLocation();
@@ -26,14 +29,14 @@ const isPolicyPage = location.pathname.startsWith("/policy/");
 {!hideNavbar && !isPolicyPage && <Navbar />}
 
   return (
+  
+    
+
     <AuthProvider>
       {!hideNavbar && <Navbar />}
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
-           <Route
-            path="/policy/:slug"
-            element={<PolicyPage />}
-          />
+         
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
@@ -53,7 +56,20 @@ const isPolicyPage = location.pathname.startsWith("/policy/");
               </ProtectedRoute>
             }
           />
-         
+         <Route
+  path="/policy/privacy-policy"
+  element={<PrivacyPolicy />}
+/>
+
+<Route
+  path="/policy/terms-and-conditions"
+  element={<TermsConditions />}
+/>
+
+<Route
+  path="/policy/cancellation&refund-policy"
+  element={<RefundCancellationPolicy />}
+/>
         </Routes>
       </AnimatePresence>
     </AuthProvider>

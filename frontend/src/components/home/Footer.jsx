@@ -138,7 +138,7 @@ function Footer({ onNav, onBook }) {
     </li>
 
     <li>
-      <Link to="/policy/cancellation-policy" className="footer-link">
+      <Link to="/policy/cancellation&refund-policy" className="footer-link">
         Refund & Cancellation Policy
       </Link>
     </li>

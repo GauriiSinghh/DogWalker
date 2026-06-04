@@ -8,30 +8,44 @@ function PolicyPage() {
 
   const [title, setTitle] = useState("");
   const [html, setHtml] = useState("");
+  const[loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadPolicy() {
-      try {
-        const pageRes = await fetch(`${API_BASE}/pages/${slug}`);
-        const pageData = await pageRes.json();
+    
+       async function loadPolicy() {
+  try {
+    setLoading(true);
 
-        setTitle(pageData.title);
+    const pageRes = await fetch(`${API_BASE}/pages/${slug}`);
+    const pageData = await pageRes.json();
 
-        const htmlRes = await fetch(
-          `${API_BASE}${pageData.file_url}`
-        );
+    setTitle(pageData.title);
 
-        const htmlText = await htmlRes.text();
+    const htmlRes = await fetch(
+      `${API_BASE}${pageData.file_url}`
+    );
 
-        setHtml(htmlText);
-      } catch (err) {
-        console.error(err);
-      }
-    }
+    const htmlText = await htmlRes.text();
+
+    setHtml(htmlText);
+  } catch (err) {
+    console.error(err);
+  } finally {
+    setLoading(false);
+  }
+}
 
     loadPolicy();
   }, [slug]);
 
+
+  if (loading) {
+  return (
+    <div className="policy-loading">
+      Loading...
+    </div>
+  );
+}
   return (
     <div className="policy-page">
       <div className="policy-container">

@@ -14,7 +14,7 @@
 }
 
 .policy-container h1 {
-  font-size: 0.1rem;
+  font-size: 2rem;
   margin-bottom: 24px;
 }
 
@@ -76,7 +76,7 @@
 }
 
 .section-title {
-  font-size: 0.15rem;
+  font-size: 1.25rem;
   font-weight: 700;
   margin-bottom: 12px;
 }
@@ -127,4 +127,11 @@
 
 .policy-content li {
   margin-bottom: 8px;
+}
+.policy-loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
 }
