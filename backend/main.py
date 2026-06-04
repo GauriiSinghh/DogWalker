@@ -22,11 +22,12 @@ app.mount(
 )
 
 # CORS
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://zuppy.onrender.com")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[FRONTEND_URL, "http://localhost:5173",
-                   "http://localhost:5174"],
+                   "http://localhost:5174",
+                   "https://zuppy.onrender.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
