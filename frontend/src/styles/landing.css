@@ -428,17 +428,17 @@
 }
 
 /* Single, clean definition — no conflicting width/height, no orange box */
- /* .zuppy .hero-visual {
+/* .zuppy .hero-visual {
   position: relative;
   width: 100%;
   max-width: 580px;
-  aspect-ratio: 4 / 3;         
-   margin-inline: auto;
+  aspect-ratio: 4 / 3;          /* fixes layout shift + broken sizing */
+  /* margin-inline: auto;
   border-radius: var(--radius-lg);
-  overflow: hidden;             
-   box-shadow: var(--shadow-md);
-  background: #f3ece4;          
- }  */
+  overflow: hidden;             /* clips the scale animation cleanly */
+  /* box-shadow: var(--shadow-md);
+  background: #f3ece4;          /* neutral placeholder, hidden once image loads */
+/* } */ 
 
 /* .zuppy .hero-visual img {
   position: absolute;
@@ -449,6 +449,12 @@
   object-position: center;
   display: block;
 } */ 
+ .hero-visual img{
+  margin-top: 80px !important;
+ }
+ .hero-visual{
+  transform: translateY( 1 px);
+ }
 .zuppy.hero-img {
   position: relative;
   margin-left: 50px;
