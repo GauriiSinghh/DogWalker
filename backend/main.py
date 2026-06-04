@@ -164,17 +164,12 @@ def create_booking(
         "created_at": new_booking.created_at.isoformat()
     }
 
-@app.get("/pages/{slug}", response_model=PageResponse)
-def get_page(slug: str, db: Session = Depends(get_db)):
-    page = db.query(Page).filter(Page.slug == slug).first()
-
-    if not page:
-        raise HTTPException(
-            status_code=404,
-            detail="Page not found"
-        )
-
-    return page
+@app.get("/pages/{slug}")
+def get_page(slug: str):
+    return {
+        "title": slug.replace("-", " ").title(),
+        "file_url": f"/policies/{slug}.html"
+    }
 
 if __name__ == "__main__":
     import uvicorn
