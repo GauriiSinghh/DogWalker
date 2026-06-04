@@ -127,7 +127,7 @@ function Footer({ onNav, onBook }) {
   <ul className="footer-list">
    <li>
   <a
-    href="https://dogwalkerbackend1.onrender.com/policies/privacy_policy.html"
+    href="https://dogwalkerbackend1.onrender.com/policies/privacy-policy.html"
     target="_blank"
     rel="noopener noreferrer"
     className="footer-link"
@@ -138,7 +138,7 @@ function Footer({ onNav, onBook }) {
 
 <li>
   <a
-    href="https://dogwalkerbackend1.onrender.com/policies/terms_and_conditions.html"
+    href="https://dogwalkerbackend1.onrender.com/policies/terms-and-conditions.html"
     target="_blank"
     rel="noopener noreferrer"
     className="footer-link"
@@ -149,7 +149,7 @@ function Footer({ onNav, onBook }) {
 
 <li>
   <a
-    href="https://dogwalkerbackend1.onrender.com/policies/cancellation_policy.html"
+    href="https://dogwalkerbackend1.onrender.com/policies/cancellation&refund-policy.html"
     target="_blank"
     rel="noopener noreferrer"
     className="footer-link"
