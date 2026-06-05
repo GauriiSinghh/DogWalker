@@ -145,10 +145,10 @@ function Booking() {
                   onChange={(e) => setApartment(e.target.value)}
                 >
                   <option value="">-- Choose Apartment --</option>
-                  <option value="A">Sobha Dream Acres Apartment</option>
-                  <option value="B">Prestige Shantiniketan</option>
-                  <option value="C">Purva Fountain Square</option>
-                  <option value="D">DLF Jigani</option>
+                  <option value="Sobha Dream Acres Apartment">Sobha Dream Acres Apartment</option>
+                  <option value="Prestige Shantiniketan">Prestige Shantiniketan</option>
+                  <option value="Purva Fountain Square">Purva Fountain Square</option>
+                  <option value="DLF Jigani">DLF Jigani</option>
                 </select>
                 {showErrors && !apartment && <div className="field-error-msg">Please select an apartment</div>}
               </div>
