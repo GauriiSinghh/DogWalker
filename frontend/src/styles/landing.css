@@ -422,58 +422,56 @@
 }
 
 /* THE FIX: hero-image is just a positioning wrapper, no background */
-/* .zuppy .hero-image {
-  justify-self: center;
-  width: 100%;
+.zuppy .hero-image {
+  position: relative;
+  display: flex;
+  justify-content: center;
 }
 
-/* Single, clean definition — no conflicting width/height, no orange box */
-/* .zuppy .hero-visual {
+.zuppy .hero-visual {
   position: relative;
-  width: 100%;
-  max-width: 580px;
-  aspect-ratio: 4 / 3;          /* fixes layout shift + broken sizing */
-  /* margin-inline: auto;
-  border-radius: var(--radius-lg);
-  overflow: hidden;             /* clips the scale animation cleanly */
-  /* box-shadow: var(--shadow-md);
-  background: #f3ece4;          /* neutral placeholder, hidden once image loads */
-/* } */ 
-
-/* .zuppy .hero-visual img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
-  display: block;
-} */ 
- 
-.zuppy .hero-img {
-  position: relative;
-  margin-left: 50px;
-}
-.zuppy .hero-visual img {
   width: 100%;
   max-width: 540px;
+}
+
+.zuppy .hero-visual img {
+  width: 100%;
   max-height: 540px;
   object-fit: cover;
   border-radius: 32px;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-md);
   will-change: transform;
 }
 
 .zuppy .hero-verified-badge {
   position: absolute;
-  bottom: -20px;
-  left: -100px;
-  background: #fff;
-  padding: 18px;
+  bottom: 24px;
+  left: -40px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+  padding: 18px 20px;
   border-radius: 20px;
-  box-shadow: var(--shadow);
-  width: 240px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+  width: 290px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  text-align: left;
+  border: 1px solid rgba(0,0,0,0.05);
+  z-index: 10;
   will-change: transform;
+}
+.zuppy .hero-verified-icon {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--green);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 1.25rem;
+  margin-top: 2px;
 }
 .floating-card strong {
   color: var(--primary);
@@ -1203,6 +1201,12 @@
   display: none;
 }
 
+.zuppy .mobile-cta-inner {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
 .zuppy.has-mobile-cta {
   padding-bottom: 0;
 }
@@ -1319,11 +1323,18 @@
     max-width: none;
     text-align: center;
     align-items: center;
-    order: 2;
+    order: 1;
   }
 
   .zuppy .hero-image {
-    order: 1;
+    order: 2;
+    display: flex;
+    justify-content: center;
+  }
+
+  .zuppy .hero-verified-badge {
+    left: 20px;
+    bottom: -32px;
   }
 
   .zuppy .hero-intro {
@@ -1346,59 +1357,77 @@
 
   .zuppy .mobile-cta {
     position: fixed;
-    bottom: 16px;
+    bottom: max(16px, env(safe-area-inset-bottom, 0px));
     left: 16px;
     right: 16px;
+    width: auto;
+    max-width: 440px;
+    margin-inline: auto;
+    transform: none;
     display: block;
     z-index: 900;
+    box-sizing: border-box;
+    padding: 0;
+  }
+
+  .zuppy .mobile-cta-inner {
+    width: 100%;
+    max-width: 100%;
   }
 
   .zuppy .mobile-cta .btn {
     width: 100%;
+    max-width: 100%;
     box-shadow: var(--shadow-md);
+    box-sizing: border-box;
+    min-height: 48px;
+    padding: 14px 20px;
+    white-space: normal;
   }
 }
 
 @media (max-width: 576px) {
 
   .zuppy .hero {
-    padding: 90px 16px 40px;
+    padding: 100px 16px 48px;
   }
 
-  .zuppy .hero-image {
+  .zuppy .hero-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  .zuppy .hero-content {
+    order: 1;
+    margin-top: 0;
+  }
+
+  .zuppy .hero-image,
+  .zuppy .hero-visual {
+    order: 2;
     width: 100%;
     margin: 0;
   }
 
   .zuppy .hero-visual img {
+    border-radius: 24px;
     width: 100%;
-    max-width: 100%;
-    border-radius: 20px;
   }
 
-  
-
-  .zuppy .hero-grid {
-  display: flex;
-  flex-direction: column;
-}
-
-.zuppy .hero-content {
-  order: 2;
-}
-
-.zuppy .hero-image,
-.zuppy .hero-visual {
-  order: 1;
-}
-
-.zuppy .hero-visual img {
-  margin-top: 0 !important;
-}
-
-.zuppy .hero-content {
-  margin-top: 24px;
-}
+  .zuppy .hero-verified-badge {
+    position: absolute;
+    bottom: -36px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 32px);
+    max-width: 320px;
+    padding: 16px;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    z-index: 10;
+  }
   .zuppy .services-grid,
   .zuppy .trust-grid,
   .zuppy .footer-grid {
@@ -1422,9 +1451,6 @@
 
   .zuppy .nav-logo-img {
     height: 38px;
-  }
-  .zuppy.mobile-cta{
-    display:none;
   }
 }
 
@@ -1502,43 +1528,4 @@
 
   
 }
-/* iPhone / Mobile Fix */
-@media (max-width: 768px) {
-
-  .zuppy .hero-image {
-    position: relative;
-    width: 100%;
-    margin-bottom: 70px;
-  }
-
-  .zuppy .hero-visual {
-    width: 100%;
-  }
-
-  .zuppy .hero-visual img {
-    width: 100%;
-    max-width: 100%;
-    height: auto;
-    display: block;
-    border-radius: 24px;
-  }
-
-  .zuppy .hero-verified-badge {
-    position: absolute;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-
-    bottom: -50px !important;
-
-    width: 85% !important;
-    max-width: 320px !important;
-
-    padding: 14px !important;
-    text-align: center;
-    z-index: 10;
-  }
-
-  .zuppy .hero-content {
-    margin-top: 50px;
-  }
-}
+/* iPhone / Mobile Fix Removed - Handled cleanly above */

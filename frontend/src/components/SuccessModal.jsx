@@ -1,71 +1,94 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Link } from "react-router-dom";
-import "../styles/modal-base.css";
-import "../styles/booking-confirmation.css";
+import { FaCheck } from "react-icons/fa";
 import logo from "../assets/images/logo.png";
+import "../styles/modal-base.css";
 
+const modalVariants = {
+  hidden: { opacity: 0, scale: 0.95 },
+  visible: { 
+    opacity: 1, 
+    scale: 1,
+    transition: { type: "spring", stiffness: 300, damping: 30 }
+  },
+  exit: { 
+    opacity: 0, 
+    scale: 0.95,
+    transition: { duration: 0.2 }
+  }
+};
 
+const overlayVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1 },
+  exit: { opacity: 0 }
+};
 
-function SuccessModal({ open, booking = {}, email, onHome, onDetails, onBookAnother }) {
-  console.log("SuccessModal booking:", booking);
+function SuccessModal({ open, booking = {}, onHome }) {
+  if (!open) return null;
+  
   return (
     <AnimatePresence>
       {open && (
-        <motion.div
-           className="modal-overlay" id="booking-modal">
-           <motion.div>
-       
-               <div
-      className="modal-dialog"
-     
-    >
+        <motion.div 
+          className="auth-page auth-page--overlay"
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          variants={overlayVariants}
+        >
+          <motion.div 
+            className="auth-card auth-card--success"
+            variants={modalVariants}
+          >
+            <div className="auth-header auth-header--minimal">
+              <div className="auth-header-logo">
+                <img src={logo} alt="Zuppy" />
+              </div>
+            </div>
+
+            <div className="auth-body success-card">
+              <div className="success-hero">
+                <div className="success-icon-wrap" aria-hidden="true">
+                  <span className="success-icon-check">
+                    <FaCheck />
+                  </span>
+                </div>
+                <h2 className="success-title">Booking confirmed</h2>
+              </div>
               
-      <aside className="modal-brand">
-        <Link to="/" className="modal-brand-logo">
-          <img src={logo} alt="Zuppy" width="120" height="40" />
-        </Link>
-        <p className="modal-brand-eyebrow">You can easily</p>
-        <h2 className="modal-brand-headline">On-Demand Dog Walking in Bangalore</h2>
-        <p className="modal-brand-text">Verified walkers at your doorstep in minutes.</p>
-      </aside>
+              <div className="success-summary">
+                <div className="summary-item">
+                  <div className="summary-label">Name</div>
+                  <div className="summary-value">
+                    {booking.name ? booking.name.charAt(0).toUpperCase() + booking.name.slice(1) : ""}
+                  </div>
+                </div>
+                
+                <div className="summary-item">
+                  <div className="summary-label">Contact</div>
+                  <div className="summary-value">{booking.mobile}</div>
+                </div>
+                
+                <div className="summary-item">
+                  <div className="summary-label">Pickup Address</div>
+                  <div className="summary-value">
+                    {booking.flatNo}, {booking.apartment}, {booking.address}
+                  </div>
+                </div>
+                
+                <div className="summary-item">
+                  <div className="summary-label">Requested On</div>
+                  <div className="summary-value">
+                    {booking.date} at {booking.time}
+                  </div>
+                </div>
+              </div>
 
-      <div className="modal-body">
-       <button
-  className="modal-close"
-  aria-label="Close dialog"
-  onClick={onBookAnother}
->
-  &times;
-</button>
-           
-            
- <div className="modal-panel" id="panel-confirmation">
-          
-          <h3 id="modal-title" className="modal-title">Booking confirmed</h3>
-          <p className="modal-subtitle">Your walk request has been received.</p>
-
-          <div className="booking-summary" id="booking-summary">
-            <dl>
-              <dt>Name</dt>
-              <dd>{booking.name ? booking.name.charAt(0).toUpperCase() + booking.name.slice(1) : ""}</dd>
-              <dt>Pickup address</dt>
-              <dd>{booking.flatNo}, {booking.apartment}, {booking.address}</dd>
-              <dt>Contact</dt>
-              <dd>{booking.mobile}</dd>
-              <dt>Requested On</dt>
-              <dd>{booking.date} at {booking.time}</dd>
-            </dl>
-          </div>
-          <p className="confirmation-email" id="confirmation-email-msg">Confirmation email sent to {email}</p>
-
-          <button className="btn btn-modal-primary btn-done-link" onClick={onHome}>
-            Done
-          </button>
-        </div>
-        </div>
-        </div>
-     
-        </motion.div>
+              <button className="btn-primary btn-primary--done" onClick={onHome}>
+                Done
+              </button>
+            </div>
+          </motion.div>
         </motion.div>
       )}
     </AnimatePresence>
