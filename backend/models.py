@@ -25,6 +25,16 @@ class Booking(Base):
     apartment = Column(String, nullable=False)
     flatNo = Column(String, nullable=False)
     address = Column(String, nullable=False)
+    status = Column(String, default="New")
+    assigned_walker = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+class Admin(Base):
+    __tablename__ = "admins"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
     
 class Page(Base):

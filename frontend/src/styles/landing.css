@@ -38,6 +38,16 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* Hide document scrollbar on landing page only (scroll still works) */
+html:has(.zuppy) {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html:has(.zuppy)::-webkit-scrollbar {
+  display: none;
+}
+
 .zuppy * {
   box-sizing: border-box;
 }
@@ -1334,7 +1344,7 @@
 
   .zuppy .hero-verified-badge {
     left: 20px;
-    bottom: -32px;
+    bottom: 16px;
   }
 
   .zuppy .hero-intro {
@@ -1417,7 +1427,7 @@
 
   .zuppy .hero-verified-badge {
     position: absolute;
-    bottom: -36px;
+    bottom: -16px;
     left: 50%;
     transform: translateX(-50%);
     width: calc(100% - 32px);

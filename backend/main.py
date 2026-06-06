@@ -1,15 +1,16 @@
 import os
-from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
+import asyncio
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import timedelta
 from fastapi.staticfiles import StaticFiles
 from db import engine, SessionLocal, get_db, Base
-from models import User, Booking, Page
-from schemas import UserCreate, UserLogin, UserResponse, BookingRequest, BookingResponse, PageResponse
-from auth import hash_password, verify_password, create_access_token, get_current_user
+from models import User, Booking, Page, Admin
+from schemas import UserCreate, UserLogin, UserResponse, BookingRequest, BookingResponse, BookingUpdate, PageResponse, AdminLogin
+from auth import hash_password, verify_password, create_access_token, get_current_user, get_current_admin
 from email_service import send_booking_email, send_user_confirmation_email
-
+from websocket_manager import manager
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -104,10 +105,47 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
         "token_type": "bearer"
     }
 
+@app.post("/admin/login")
+def admin_login(
+    admin_data: AdminLogin,
+    db: Session = Depends(get_db)
+):
+    admin = db.query(Admin).filter(
+        Admin.email == admin_data.email
+    ).first()
+   
+    if not admin:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid admin credentials"
+        )
+    
+
+    if not verify_password(
+        admin_data.password,
+        admin.hashed_password
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid admin credentials"
+        )
+
+    access_token = create_access_token(
+        data={
+            "sub": str(admin.id),
+            "role": "admin"
+        }
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer"
+    }
+
 # ===== BOOKING ENDPOINT =====
 
 @app.post("/book")
-def create_booking(
+async def create_booking(
     booking_data: BookingRequest,
     background_tasks: BackgroundTasks,
     user_id: str = Depends(get_current_user),
@@ -130,10 +168,22 @@ def create_booking(
         apartment=booking_data.apartment,
         flatNo=booking_data.flatNo,
         address=booking_data.address,
+
+        status="New",
+        assigned_walker=None,
     )
     db.add(new_booking)
     db.commit()
     db.refresh(new_booking)
+
+    await manager.broadcast({
+        "type": "new_booking",
+        "booking_id": new_booking.id,
+        "name": new_booking.name,
+        "apartment": new_booking.apartment,
+        "status": "New"
+    })
+
     
     # Send emails in background (non-blocking)
     background_tasks.add_task(
@@ -163,6 +213,77 @@ def create_booking(
         "apartment": new_booking.apartment,
         "created_at": new_booking.created_at.isoformat()
     }
+@app.get("/bookings")
+def get_bookings(
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db)):
+    return db.query(Booking).order_by(
+        Booking.created_at.desc()
+    ).all()
+
+@app.get("/bookings/{booking_id}")
+def get_booking(
+    booking_id: int,
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    booking = db.query(Booking).filter(
+        Booking.id == booking_id
+    ).first()
+
+    if not booking:
+        raise HTTPException(
+            status_code=404,
+            detail="Booking not found"
+        )
+
+    return booking
+
+@app.patch("/bookings/{booking_id}")
+async def update_booking(
+    booking_id: int,
+    update: BookingUpdate,
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    booking = db.query(Booking).filter(
+        Booking.id == booking_id
+    ).first()
+
+    if not booking:
+        raise HTTPException(
+            status_code=404,
+            detail="Booking not found"
+        )
+
+    booking.status = update.status
+
+    if update.assigned_walker:
+        booking.assigned_walker = update.assigned_walker
+
+    db.commit()
+    db.refresh(booking)
+
+    
+    await manager.broadcast({
+        "type": "status_updated",
+        "booking_id": booking.id,
+        "status": booking.status,
+        "assigned_walker": booking.assigned_walker
+    })
+
+
+    return booking
+
+@app.websocket("/ws/bookings")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+
+    try:
+        while True:
+            await asyncio.sleep(30)
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
 
 @app.get("/pages/{slug}")
 def get_page(slug: str):

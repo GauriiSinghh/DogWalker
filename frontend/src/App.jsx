@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation } from "react-router-dom";
+import { Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { AuthProvider } from "./components/AuthContext.jsx";
 import Navbar from "./components/home/Navbar.jsx";
@@ -12,6 +12,8 @@ import PolicyPage from "./pages/PolicyPage.jsx";
 import PrivacyPolicy from "./pages/PrivacyPolicy.jsx";
 import TermsConditions from "./pages/TermsConditions.jsx";
 import RefundCancellationPolicy from "./pages/RefundCancellationPolicy.jsx";
+import AdminDashboard from "./pages/AdminDashboard.jsx"
+import AdminProtectedRoute from "./components/AdminProtectedRoute.jsx";
 
 function App() {
   const location = useLocation();
@@ -23,6 +25,8 @@ function App() {
   "/login",
   "/signup",
   "/booking-choice",
+  "/admin/login",
+  "/admin/dashboard",
 ].includes(location.pathname);
 
 const isPolicyPage = location.pathname.startsWith("/policy/");
@@ -40,6 +44,26 @@ const isPolicyPage = location.pathname.startsWith("/policy/");
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/admin/login" element={<Navigate to="/login" replace />} />
+          <Route path="/admin-login" element={<Navigate to="/login" replace />} />
+          <Route
+            path="/admin/dashboard"
+            element={
+              <AdminProtectedRoute>
+                <AdminDashboard />
+              </AdminProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin-dashboard"
+            element={
+              <AdminProtectedRoute>
+                <AdminDashboard />
+              </AdminProtectedRoute>
+            }
+          />
+          <Route path="/admin" element={<Navigate to="/" replace />} />
+
           <Route
             path="/booking-choice"
             element={

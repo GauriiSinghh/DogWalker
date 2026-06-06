@@ -5,7 +5,7 @@ import resend
 load_dotenv()
 
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
+ADMIN_NOTIFICATION_EMAIL = os.getenv("ADMIN_NOTIFICATION_EMAIL")
 FROM_EMAIL = os.getenv("FROM_EMAIL", "Paws Pal Connect <onboarding@resend.dev>")
 
 resend.api_key = RESEND_API_KEY
@@ -14,13 +14,13 @@ def send_booking_email(apartment, name, mobile, flatNo, address):
     """Send booking notification to ADMIN"""
     print("📧 send_booking_email function started")
     print("FROM_EMAIL  =", FROM_EMAIL)
-    print("ADMIN_EMAIL =", ADMIN_EMAIL)
+    print("ADMIN_NOTIFICATION_EMAIL =", ADMIN_NOTIFICATION_EMAIL)
 
     if not RESEND_API_KEY:
         print("❌ Email NOT sent: RESEND_API_KEY is missing.")
         return
-    if not ADMIN_EMAIL:
-        print("❌ Email NOT sent: ADMIN_EMAIL is missing.")
+    if not ADMIN_NOTIFICATION_EMAIL:
+        print("❌ Email NOT sent: ADMIN_NOTIFICATION_EMAIL is missing.")
         return
 
     subject = f"🐾 New Booking from Apartment {apartment}"
@@ -38,7 +38,7 @@ def send_booking_email(apartment, name, mobile, flatNo, address):
     try:
         params = {
             "from": FROM_EMAIL,
-            "to": [ADMIN_EMAIL],
+            "to": [ADMIN_NOTIFICATION_EMAIL],
             "subject": subject,
             "text": body,
         }

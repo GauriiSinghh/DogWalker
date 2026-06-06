@@ -14,6 +14,10 @@ class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
+class AdminLogin(BaseModel):
+    email: EmailStr
+    password: str
+
 class UserResponse(BaseModel):
     id: int
     email: str
@@ -43,6 +47,10 @@ class BookingResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class BookingUpdate(BaseModel):
+    status: str
+    assigned_walker: str | None = None
 
 class PageResponse(BaseModel):
     id: int

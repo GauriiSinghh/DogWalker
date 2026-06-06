@@ -4,6 +4,7 @@ import { useNavigate, useLocation, Link } from "react-router-dom";
 import { FaTimes } from "react-icons/fa";
 import { useAuth } from "../hooks/useAuth.js";
 import { API_BASE } from "../config/api.js";
+import { setAdminToken } from "../utils/adminAuth.js";
 import logo from "../assets/images/logo.png";
 import "../styles/modal-base.css";
 import "../styles/login.css";
@@ -48,6 +49,27 @@ function Login() {
     }
     setLoading(true);
     try {
+      const adminResponse = await fetch(`${API_BASE}/admin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      let adminData = {};
+      try {
+        adminData = await adminResponse.json();
+      } catch {
+        adminData = {};
+      }
+
+      if (adminResponse.ok && adminData.access_token) {
+        setAdminToken(adminData.access_token);
+        navigate("/admin/dashboard", { replace: true });
+        return;
+      }
+
+      const adminAuthRejected = adminResponse.status === 401;
+
       const response = await fetch(`${API_BASE}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -55,10 +77,22 @@ function Login() {
       });
 
       let data = {};
-      try { data = await response.json(); } catch { data = {}; }
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
 
       if (!response.ok) {
-        throw new Error(data.detail || "Invalid email or password");
+        const userError =
+          typeof data.detail === "string" ? data.detail : null;
+        const adminError =
+          adminAuthRejected && typeof adminData.detail === "string"
+            ? adminData.detail
+            : null;
+        throw new Error(
+          userError || adminError || "Invalid email or password"
+        );
       }
 
       login(data.user, data.access_token);
