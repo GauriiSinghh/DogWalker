@@ -6,7 +6,7 @@ load_dotenv()
 
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 ADMIN_NOTIFICATION_EMAIL = os.getenv("ADMIN_NOTIFICATION_EMAIL")
-FROM_EMAIL = os.getenv("FROM_EMAIL", "Paws Pal Connect <onboarding@resend.dev>")
+FROM_EMAIL = os.getenv("FROM_EMAIL", "Paws Pal Connect <onboarding@zuppy.pawspalconnect>")
 
 resend.api_key = RESEND_API_KEY
 
@@ -62,14 +62,13 @@ def send_user_confirmation_email(user_name, user_email, apartment, flatNo, addre
     subject = "🐾 Your Paws Pal Connect Booking Confirmed!"
     body = (
         f"Hi {user_name},\n\n"
-        f"Thank you for booking with Paws Pal Connect! 🐶\n\n"
+        f"Thank you for booking with Zuppy! 🐶\n\n"
         f"Here's a summary of your booking:\n\n"
-        f"Apartment: {apartment}\n"
-        f"Flat/Villa No: {flatNo}\n"
-        f"Address: {address}\n\n"
-        f"A verified walker has been notified and will arrive at your doorstep within 10 minutes.\n\n"
-        f"You'll receive live updates about the walk.\n\n"
-        f"Questions? Contact us at zuppy@pawspalconnect.com\n\n"
+        f"🏢Apartment: {apartment}\n"
+        f"🏠Flat/Villa No: {flatNo}\n"
+        f"📍Address: {address}\n\n"
+        f"A verified walker has been notified and will arrive at your doorstep within 10 minutes.\n\n"     
+        f"Any Questions? Contact us at zuppy@pawspalconnect.com\n\n"
         f"Happy walking! 🐾\n"
         f"— Paws Pal Connect Team"
     )

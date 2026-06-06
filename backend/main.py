@@ -195,14 +195,14 @@ async def create_booking(
         address=booking_data.address,
     )
     
-    # background_tasks.add_task(
-    #     send_user_confirmation_email,
-    #     user_name=booking_data.name,
-    #     user_email=user_email,
-    #     apartment=booking_data.apartment,
-    #     flatNo=booking_data.flatNo,
-    #     address=booking_data.address,
-    # )
+    background_tasks.add_task(
+        send_user_confirmation_email,
+        user_name=booking_data.name,
+        user_email=user_email,
+        apartment=booking_data.apartment,
+        flatNo=booking_data.flatNo,
+        address=booking_data.address,
+    )
     
     print(f"✅ Booking {new_booking.id} created")
     
