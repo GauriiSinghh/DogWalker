@@ -89,7 +89,7 @@ export default function AdminDashboard() {
   const WS_URL =
   window.location.hostname === "localhost"
     ? "ws://localhost:8000/ws/bookings"
-    : "wss://https://dogwalkerbackend1.onrender.com/ws/bookings";
+    : "wss://dogwalkerbackend1.onrender.com/ws/bookings";
 
 const ws = new WebSocket(WS_URL);
 
