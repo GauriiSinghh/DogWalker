@@ -292,7 +292,7 @@ def get_page(slug: str):
         "file_url": f"/policies/{slug}.html"
     }
 
-import fix_db
+
 
 if __name__ == "__main__":
     import uvicorn
