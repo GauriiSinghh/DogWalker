@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 from fastapi.staticfiles import StaticFiles
 from db import engine, SessionLocal, get_db, Base
-from models import User, Booking, Page, Admin
+from models import User, Pet, Booking, Page, Admin
 from schemas import UserCreate, UserLogin, UserResponse, BookingRequest, BookingResponse, BookingUpdate, PageResponse, AdminLogin
 from auth import hash_password, verify_password, create_access_token, get_current_user, get_current_admin
 from email_service import send_booking_email, send_user_confirmation_email
@@ -44,7 +44,7 @@ def health_check():
 @app.post("/signup")
 def signup(user_data: UserCreate, db: Session = Depends(get_db)):
     """Create a new user account"""
-    print(f"📝 Signup request for email: {user_data.email}")
+    print(f"Signup request for email: {user_data.email}")
     
     # Check if user already exists
     existing_user = db.query(User).filter(User.email == user_data.email).first()
@@ -64,16 +64,26 @@ def signup(user_data: UserCreate, db: Session = Depends(get_db)):
         apartment=user_data.apartment,
         flatNo=user_data.flatNo,
         address=user_data.address,
+        pet_name=user_data.pet_name,
+        pet_image=user_data.pet_image,
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+
+    pet = Pet(
+        user_id=new_user.id,
+        name=user_data.pet_name,
+        image_url=user_data.pet_image,
+    )
+    db.add(pet)
+    db.commit()
     
     # Create JWT token
     access_token = create_access_token(data={"sub": str(new_user.id)})
     
-    user_response = UserResponse.from_orm(new_user)
-    print(f"✅ User {user_data.email} signed up successfully")
+    user_response = UserResponse.model_validate(new_user)
+    print(f"User {user_data.email} signed up successfully")
     
     return {
         "user": user_response,
@@ -84,7 +94,7 @@ def signup(user_data: UserCreate, db: Session = Depends(get_db)):
 @app.post("/login")
 def login(user_data: UserLogin, db: Session = Depends(get_db)):
     """Authenticate user and return JWT"""
-    print(f"🔐 Login request for email: {user_data.email}")
+    print(f"Login request for email: {user_data.email}")
     
     user = db.query(User).filter(User.email == user_data.email).first()
    
@@ -95,9 +105,9 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
         )
     
     access_token = create_access_token(data={"sub": str(user.id)})
-    user_response = UserResponse.from_orm(user)
+    user_response = UserResponse.model_validate(user)
     
-    print(f"✅ User {user_data.email} logged in successfully")
+    print(f"User {user_data.email} logged in successfully")
     
     return {
         "user": user_response,
@@ -152,7 +162,7 @@ async def create_booking(
     db: Session = Depends(get_db)
 ):
     """Create a booking and send emails to admin and user"""
-    print(f"📤 Booking request from user {user_id}")
+    print(f"Booking request from user {user_id}")
     print(f"Booking data: {booking_data}")
     
     # Get user email if not provided in booking_data
@@ -204,7 +214,7 @@ async def create_booking(
         address=booking_data.address,
     )
     
-    print(f"✅ Booking {new_booking.id} created")
+    print(f"Booking {new_booking.id} created")
     
     return {
         "id": new_booking.id,

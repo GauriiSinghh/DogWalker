@@ -12,15 +12,15 @@ resend.api_key = RESEND_API_KEY
 
 def send_booking_email(apartment, name, mobile, flatNo, address):
     """Send booking notification to ADMIN"""
-    print("📧 send_booking_email function started")
+    print("send_booking_email function started")
     print("FROM_EMAIL  =", FROM_EMAIL)
     print("ADMIN_NOTIFICATION_EMAIL =", ADMIN_NOTIFICATION_EMAIL)
 
     if not RESEND_API_KEY:
-        print("❌ Email NOT sent: RESEND_API_KEY is missing.")
+        print("Email NOT sent: RESEND_API_KEY is missing.")
         return
     if not ADMIN_NOTIFICATION_EMAIL:
-        print("❌ Email NOT sent: ADMIN_NOTIFICATION_EMAIL is missing.")
+        print("Email NOT sent: ADMIN_NOTIFICATION_EMAIL is missing.")
         return
 
     subject = f"🐾 New Booking from Apartment {apartment}"
@@ -43,20 +43,20 @@ def send_booking_email(apartment, name, mobile, flatNo, address):
             "text": body,
         }
         response = resend.Emails.send(params)
-        print(f"✅ Admin email sent | Resend response: {response}")
+        print(f"Admin email sent | Resend response: {response}")
     except Exception as e:
-        print(f"❌ Admin email sending failed: {repr(e)}")
+        print(f"Admin email sending failed: {repr(e)}")
 
 
 def send_user_confirmation_email(user_name, user_email, apartment, flatNo, address):
     """Send booking confirmation to USER"""
-    print(f"📧 send_user_confirmation_email function started for {user_email}")
+    print(f"send_user_confirmation_email function started for {user_email}")
 
     if not RESEND_API_KEY:
-        print("❌ User confirmation email NOT sent: RESEND_API_KEY is missing.")
+        print("User confirmation email NOT sent: RESEND_API_KEY is missing.")
         return
     if not user_email:
-        print("❌ User confirmation email NOT sent: user_email is missing.")
+        print("User confirmation email NOT sent: user_email is missing.")
         return
 
     subject = "🐾 Your Paws Pal Connect Booking Confirmed!"
@@ -81,6 +81,6 @@ def send_user_confirmation_email(user_name, user_email, apartment, flatNo, addre
             "text": body,
         }
         response = resend.Emails.send(params)
-        print(f"✅ User confirmation email sent to {user_email} | Resend response: {response}")
+        print(f"User confirmation email sent to {user_email} | Resend response: {response}")
     except Exception as e:
-        print(f"❌ User confirmation email sending failed: {repr(e)}")
+        print(f"User confirmation email sending failed: {repr(e)}")
