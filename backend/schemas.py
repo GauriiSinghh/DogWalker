@@ -9,6 +9,8 @@ class UserCreate(BaseModel):
     apartment: str
     flatNo: str
     address: str
+    pet_name: str
+    pet_image: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -26,6 +28,8 @@ class UserResponse(BaseModel):
     apartment: str
     flatNo: str
     address: str
+    pet_name: Optional[str] = None
+    pet_image: Optional[str] = None
 
     class Config:
         from_attributes = True

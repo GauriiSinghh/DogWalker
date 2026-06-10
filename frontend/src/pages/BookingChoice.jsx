@@ -48,8 +48,17 @@ function BookingChoice() {
         }),
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "Booking failed");
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+      if (!response.ok) {
+        throw new Error(
+          typeof data.detail === "string" ? data.detail : "Booking failed"
+        );
+      }
 
       setConfirmed({
         id: data.id,
@@ -66,7 +75,11 @@ function BookingChoice() {
         }),
       });
     } catch (err) {
-      setErrorMsg(err.message || "Booking failed. Please try again.");
+      setErrorMsg(
+        err.name === "TypeError"
+          ? "Unable to reach the server. Please try again."
+          : err.message || "Booking failed. Please try again."
+      );
     } finally {
       setLoading(false);
     }

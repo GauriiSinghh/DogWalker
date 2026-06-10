@@ -28,12 +28,18 @@ function Signup() {
   const [address, setAddress] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [petName, setPetName] = useState("");
+  const [petImage, setPetImage] = useState("");
+  const [petImagePreview, setPetImagePreview] = useState("");
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
   const [emailError, setEmailError] = useState("");
+  const [petImageError, setPetImageError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+
+  const MAX_PET_IMAGE_SIZE = 2 * 1024 * 1024;
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -55,8 +61,41 @@ function Signup() {
     if (!phoneRegex.test(mobile.trim())) { isValid = false; scrollToId("signup-mobile"); }
     if (name.trim().length < 2) { isValid = false; scrollToId("signup-name"); }
     if (!apartment) { isValid = false; scrollToId("signup-apartment"); }
+    if (petName.trim().length < 2) { isValid = false; scrollToId("signup-pet-name"); }
+    if (!petImage) { isValid = false; scrollToId("signup-pet-image"); }
 
     return isValid;
+  }
+
+  function handlePetImageChange(e) {
+    const file = e.target.files?.[0];
+    setPetImageError("");
+
+    if (!file) {
+      setPetImage("");
+      setPetImagePreview("");
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setPetImageError("Please upload an image file");
+      e.target.value = "";
+      return;
+    }
+
+    if (file.size > MAX_PET_IMAGE_SIZE) {
+      setPetImageError("Image must be smaller than 2 MB");
+      e.target.value = "";
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      setPetImage(result);
+      setPetImagePreview(result);
+    };
+    reader.readAsDataURL(file);
   }
 
   async function handleSubmit(e) {
@@ -74,7 +113,17 @@ function Signup() {
       const response = await fetch(`${API_BASE}/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apartment, name, mobile, flatNo, address, email, password }),
+        body: JSON.stringify({
+          apartment,
+          name,
+          mobile,
+          flatNo,
+          address,
+          email,
+          password,
+          pet_name: petName.trim(),
+          pet_image: petImage,
+        }),
       });
 
       let data = {};
@@ -191,6 +240,46 @@ function Signup() {
                   placeholder="Tower A, Near gate 2..."
                 />
                 {showErrors && address.trim().length < 10 && <div className="field-error-msg">Please enter a detailed address</div>}
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="signup-pet-name" className="form-label">Pet name</label>
+                <input
+                  id="signup-pet-name"
+                  type="text"
+                  className={`form-input ${showErrors && petName.trim().length < 2 ? "invalid" : ""}`}
+                  value={petName}
+                  onChange={(e) => setPetName(e.target.value)}
+                  placeholder="Bruno"
+                />
+                {showErrors && petName.trim().length < 2 && (
+                  <div className="field-error-msg">Please enter your pet's name</div>
+                )}
+              </div>
+              <div className="form-group">
+                <label htmlFor="signup-pet-image" className="form-label">Pet photo</label>
+                <div className="pet-image-upload">
+                  <input
+                    id="signup-pet-image"
+                    type="file"
+                    accept="image/*"
+                    className="pet-image-input"
+                    onChange={handlePetImageChange}
+                  />
+                  <label htmlFor="signup-pet-image" className={`pet-image-label ${showErrors && !petImage ? "invalid" : ""}`}>
+                    {petImagePreview ? (
+                      <img src={petImagePreview} alt="Pet preview" className="pet-image-preview" />
+                    ) : (
+                      <span>Upload a photo</span>
+                    )}
+                  </label>
+                </div>
+                {showErrors && !petImage && (
+                  <div className="field-error-msg">Please upload a pet photo</div>
+                )}
+                {petImageError && <div className="field-error-msg">{petImageError}</div>}
               </div>
             </div>
 

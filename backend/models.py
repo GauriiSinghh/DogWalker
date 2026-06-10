@@ -12,7 +12,19 @@ class User(Base):
     apartment = Column(String, nullable=False)
     flatNo = Column(String, nullable=False)
     address = Column(String, nullable=False)
+    pet_name = Column(String, nullable=True)
+    pet_image = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
+
+class Pet(Base):
+    __tablename__ = "pets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    name = Column(String, nullable=False)
+    image_url = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 class Booking(Base):
     __tablename__ = "bookings"
