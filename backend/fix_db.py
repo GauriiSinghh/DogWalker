@@ -17,6 +17,16 @@ with engine.connect() as conn:
     """))
 
     conn.execute(text("""
+        ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS pet_name VARCHAR(255);
+    """))
+
+    conn.execute(text("""
+        ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS pet_image TEXT;
+    """))
+
+    conn.execute(text("""
         ALTER TABLE users
         ADD COLUMN IF NOT EXISTS pet_name VARCHAR(255);
     """))

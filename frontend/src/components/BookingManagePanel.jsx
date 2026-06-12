@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { FiX } from "react-icons/fi";
 import StatusBadge from "./StatusBadge";
+import ImageLightbox from "./ImageLightbox";
 import { useAdminTheme } from "../hooks/useAdminTheme";
 import { getWalkers } from "../services/adminApi";
 
@@ -194,6 +195,25 @@ export default function BookingManagePanel({ booking, onClose, onBookingUpdate }
                     <div className="admin-manage__detail-row">
                       <dt>Assigned Walker</dt>
                       <dd>{booking.assigned_walker}</dd>
+                    </div>
+                  )}
+                  {(booking.pet_name || booking.pet_image) && (
+                    <div className="admin-manage__detail-row">
+                      <dt>Pet</dt>
+                      <dd>
+                        <div className="admin-pet-info">
+                          {booking.pet_image && (
+                            <ImageLightbox
+                              src={booking.pet_image}
+                              alt={booking.pet_name || "Pet"}
+                              caption={booking.pet_name}
+                            />
+                          )}
+                          {booking.pet_name && (
+                            <span className="admin-pet-info__name">{booking.pet_name}</span>
+                          )}
+                        </div>
+                      </dd>
                     </div>
                   )}
                 </dl>

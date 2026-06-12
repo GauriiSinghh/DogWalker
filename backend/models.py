@@ -47,6 +47,8 @@ class Booking(Base):
     apartment = Column(String, nullable=False)
     flatNo = Column(String, nullable=False)
     address = Column(String, nullable=False)
+    pet_name = Column(String, nullable=True)
+    pet_image = Column(Text, nullable=True)
     status = Column(String, default="New")
     assigned_walker = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
