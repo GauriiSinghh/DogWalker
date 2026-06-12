@@ -318,6 +318,44 @@ def delete_walker(
     return {"message": "Walker removed successfully"}
 
 
+def _resolve_pet_fields(
+    pet_name: str | None,
+    pet_image: str | None,
+    user: User | None,
+) -> tuple[str | None, str | None]:
+    if pet_name:
+        return pet_name, pet_image
+    if user:
+        return user.pet_name, user.pet_image
+    return None, None
+
+
+def _serialize_booking(booking: Booking, db: Session) -> dict:
+    user = None
+    if booking.user_id:
+        user = db.query(User).filter(User.id == booking.user_id).first()
+
+    pet_name, pet_image = _resolve_pet_fields(
+        booking.pet_name, booking.pet_image, user
+    )
+
+    return {
+        "id": booking.id,
+        "user_id": booking.user_id,
+        "name": booking.name,
+        "email": booking.email,
+        "mobile": booking.mobile,
+        "apartment": booking.apartment,
+        "flatNo": booking.flatNo,
+        "address": booking.address,
+        "pet_name": pet_name,
+        "pet_image": pet_image,
+        "status": booking.status,
+        "assigned_walker": booking.assigned_walker,
+        "created_at": booking.created_at,
+    }
+
+
 def _build_customer_summaries(db: Session) -> list[CustomerSummary]:
     bookings = db.query(Booking).order_by(Booking.created_at.desc()).all()
     grouped: dict[str, dict] = {}
@@ -341,6 +379,7 @@ def _build_customer_summaries(db: Session) -> list[CustomerSummary]:
     customers: list[CustomerSummary] = []
     for data in grouped.values():
         pet_name = None
+        pet_image = None
         if data["user_id"]:
             user = db.query(User).filter(User.id == data["user_id"]).first()
             if user:
@@ -350,8 +389,11 @@ def _build_customer_summaries(db: Session) -> list[CustomerSummary]:
                 data["flatNo"] = user.flatNo
                 data["address"] = user.address
                 pet_name = user.pet_name
+                pet_image = user.pet_image
 
-        customers.append(CustomerSummary(pet_name=pet_name, **data))
+        customers.append(
+            CustomerSummary(pet_name=pet_name, pet_image=pet_image, **data)
+        )
 
     customers.sort(
         key=lambda c: c.last_booking_at or datetime.min.replace(tzinfo=None),
@@ -412,11 +454,12 @@ async def create_booking(
     print(f"Booking request from user {user_id}")
     print(f"Booking data: {booking_data}")
     
-    # Get user email if not provided in booking_data
     user = db.query(User).filter(User.id == user_id).first()
     user_email = booking_data.email or (user.email if user else None)
-    
-    # Create booking record
+    pet_name, pet_image = _resolve_pet_fields(
+        booking_data.pet_name, booking_data.pet_image, user
+    )
+
     new_booking = Booking(
         user_id=int(user_id) if user_id else None,
         name=booking_data.name,
@@ -425,7 +468,8 @@ async def create_booking(
         apartment=booking_data.apartment,
         flatNo=booking_data.flatNo,
         address=booking_data.address,
-
+        pet_name=pet_name,
+        pet_image=pet_image,
         status="New",
         assigned_walker=None,
     )
@@ -474,9 +518,10 @@ async def create_booking(
 def get_bookings(
     admin=Depends(get_current_admin),
     db: Session = Depends(get_db)):
-    return db.query(Booking).order_by(
+    bookings = db.query(Booking).order_by(
         Booking.created_at.desc()
     ).all()
+    return [_serialize_booking(b, db) for b in bookings]
 
 @app.get("/bookings/{booking_id}")
 def get_booking(
@@ -494,7 +539,7 @@ def get_booking(
             detail="Booking not found"
         )
 
-    return booking
+    return _serialize_booking(booking, db)
 
 @app.patch("/bookings/{booking_id}")
 async def update_booking(
@@ -563,7 +608,7 @@ async def update_booking(
     })
 
 
-    return booking
+    return _serialize_booking(booking, db)
 
 @app.websocket("/ws/bookings")
 async def websocket_endpoint(websocket: WebSocket):

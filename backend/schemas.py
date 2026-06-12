@@ -42,6 +42,8 @@ class BookingRequest(BaseModel):
     flatNo: str
     address: str
     email: Optional[str] = None
+    pet_name: Optional[str] = None
+    pet_image: Optional[str] = None
 
 class BookingResponse(BaseModel):
     id: int
@@ -89,6 +91,7 @@ class CustomerSummary(BaseModel):
     address: str
     user_id: Optional[int] = None
     pet_name: Optional[str] = None
+    pet_image: Optional[str] = None
     booking_count: int
     last_booking_at: Optional[datetime] = None
 

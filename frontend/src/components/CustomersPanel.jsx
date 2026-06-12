@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { FiEye, FiX } from "react-icons/fi";
 import StatusBadge from "./StatusBadge";
+import ImageLightbox from "./ImageLightbox";
 import { getCustomers, getCustomerDetail } from "../services/adminApi";
 
 function CustomerDetailModal({ customer, onClose }) {
@@ -49,10 +50,23 @@ function CustomerDetailModal({ customer, onClose }) {
               <dt>Address</dt>
               <dd>{customer.address}</dd>
             </div>
-            {customer.pet_name && (
+            {(customer.pet_name || customer.pet_image) && (
               <div className="admin-entity-details__row">
                 <dt>Pet</dt>
-                <dd>{customer.pet_name}</dd>
+                <dd>
+                  <div className="admin-pet-info">
+                    {customer.pet_image && (
+                      <ImageLightbox
+                        src={customer.pet_image}
+                        alt={customer.pet_name || "Pet"}
+                        caption={customer.pet_name}
+                      />
+                    )}
+                    {customer.pet_name && (
+                      <span className="admin-pet-info__name">{customer.pet_name}</span>
+                    )}
+                  </div>
+                </dd>
               </div>
             )}
             <div className="admin-entity-details__row">

@@ -7,6 +7,7 @@ import { API_BASE } from "../config/api.js";
 import SuccessModal from "../components/SuccessModal.jsx";
 import logo from "../assets/images/logo.png";
 import "../styles/modal-base.css";
+import "../styles/signup.css";
 
 const pageTransition = {
   initial: { opacity: 0, y: 15 },
@@ -20,13 +21,20 @@ function Booking() {
   const { user } = useAuth();
   const location = useLocation();
   const prefillSelf = location.state?.mode === "self";
-  
+  const bookForOther = location.state?.mode === "other";
+
   const [apartment, setApartment] = useState(prefillSelf ? user?.apartment || "" : "");
   const [name, setName] = useState(prefillSelf ? user?.name || "" : "");
   const [mobile, setMobile] = useState(prefillSelf ? user?.mobile || "" : "");
   const [flatNo, setFlatNo] = useState(prefillSelf ? user?.flatNo || "" : "");
   const [address, setAddress] = useState(prefillSelf ? user?.address || "" : "");
-  
+  const [petName, setPetName] = useState("");
+  const [petImage, setPetImage] = useState("");
+  const [petImagePreview, setPetImagePreview] = useState("");
+  const [petImageError, setPetImageError] = useState("");
+
+  const MAX_PET_IMAGE_SIZE = 2 * 1024 * 1024;
+
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
@@ -50,8 +58,41 @@ function Booking() {
     if (!phoneRegex.test(mobile.trim())) { isValid = false; scrollToId("mobile"); }
     if (name.trim().length < 2) { isValid = false; scrollToId("name"); }
     if (!apartment) { isValid = false; scrollToId("apartment"); }
+    if (bookForOther && petName.trim().length < 2) { isValid = false; scrollToId("pet-name"); }
+    if (bookForOther && !petImage) { isValid = false; scrollToId("pet-image"); }
 
     return isValid;
+  }
+
+  function handlePetImageChange(e) {
+    const file = e.target.files?.[0];
+    setPetImageError("");
+
+    if (!file) {
+      setPetImage("");
+      setPetImagePreview("");
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setPetImageError("Please upload an image file");
+      e.target.value = "";
+      return;
+    }
+
+    if (file.size > MAX_PET_IMAGE_SIZE) {
+      setPetImageError("Image must be smaller than 2 MB");
+      e.target.value = "";
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      setPetImage(result);
+      setPetImagePreview(result);
+    };
+    reader.readAsDataURL(file);
   }
 
   async function handleSubmit(e) {
@@ -64,6 +105,10 @@ function Booking() {
     const bookingData = {
       apartment, name, mobile, flatNo, address,
       email: user?.email || null,
+      ...(bookForOther && {
+        pet_name: petName.trim(),
+        pet_image: petImage,
+      }),
     };
 
     setLoading(true);
@@ -103,6 +148,7 @@ function Booking() {
 
       setShowErrors(false);
       setApartment(""); setName(""); setMobile(""); setFlatNo(""); setAddress("");
+      setPetName(""); setPetImage(""); setPetImagePreview("");
     } catch (err) {
       setError("Could not submit booking. Please try again.");
     } finally {
@@ -131,9 +177,11 @@ function Booking() {
 
           <div className="auth-body">
             <h1 className="auth-title">Book a Walker</h1>
-            
-            {/* Added extra margin bottom since we removed the subtitle */}
-            <form className="auth-form" style={{ marginTop: '24px' }} onSubmit={handleSubmit} noValidate>
+            {bookForOther && (
+              <p className="auth-subtitle">Enter the recipient&apos;s details and their pet&apos;s info.</p>
+            )}
+
+            <form className="auth-form" style={{ marginTop: bookForOther ? "16px" : "24px" }} onSubmit={handleSubmit} noValidate>
               {error && <div className="global-error">{error}</div>}
 
               <div className="form-group">
@@ -206,6 +254,51 @@ function Booking() {
                   {showErrors && address.trim().length < 10 && <div className="field-error-msg">Please enter a detailed address</div>}
                 </div>
               </div>
+
+              {bookForOther && (
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor="pet-name" className="form-label">Pet name</label>
+                    <input
+                      id="pet-name"
+                      type="text"
+                      className={`form-input ${showErrors && petName.trim().length < 2 ? "invalid" : ""}`}
+                      value={petName}
+                      onChange={(e) => setPetName(e.target.value)}
+                      placeholder="Bruno"
+                    />
+                    {showErrors && petName.trim().length < 2 && (
+                      <div className="field-error-msg">Please enter the pet&apos;s name</div>
+                    )}
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="pet-image" className="form-label">Pet photo</label>
+                    <div className="pet-image-upload">
+                      <input
+                        id="pet-image"
+                        type="file"
+                        accept="image/*"
+                        className="pet-image-input"
+                        onChange={handlePetImageChange}
+                      />
+                      <label
+                        htmlFor="pet-image"
+                        className={`pet-image-label ${showErrors && !petImage ? "invalid" : ""}`}
+                      >
+                        {petImagePreview ? (
+                          <img src={petImagePreview} alt="Pet preview" className="pet-image-preview" />
+                        ) : (
+                          <span>Upload a photo</span>
+                        )}
+                      </label>
+                    </div>
+                    {showErrors && !petImage && (
+                      <div className="field-error-msg">Please upload a pet photo</div>
+                    )}
+                    {petImageError && <div className="field-error-msg">{petImageError}</div>}
+                  </div>
+                </div>
+              )}
 
               <div className="sticky-footer">
                 <button type="submit" className="btn-primary" disabled={loading}>
