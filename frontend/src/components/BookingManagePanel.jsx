@@ -4,14 +4,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FiX } from "react-icons/fi";
 import StatusBadge from "./StatusBadge";
 import { useAdminTheme } from "../hooks/useAdminTheme";
+import { getWalkers } from "../services/adminApi";
 
 const STATUS_OPTIONS = [
-  {
-    status: "Assigned",
-    label: "Assigned",
-    description: "Walker assigned",
-    variant: "assigned",
-  },
   {
     status: "Completed",
     label: "Completed",
@@ -27,27 +22,59 @@ const STATUS_OPTIONS = [
 ];
 
 const DETAIL_ROWS = [
-  { key: "name", label: "Name" },
+  { key: "name", label: "Customer" },
   { key: "apartment", label: "Apartment" },
   { key: "mobile", label: "Mobile" },
+  { key: "address", label: "Address" },
 ];
 
-export default function BookingManagePanel({ booking, onClose, onStatusChange }) {
+export default function BookingManagePanel({ booking, onClose, onBookingUpdate }) {
   const { theme } = useAdminTheme();
-  const [loadingStatus, setLoadingStatus] = useState(null);
+  const [loadingAction, setLoadingAction] = useState(null);
   const [feedback, setFeedback] = useState(null);
+  const [walkers, setWalkers] = useState([]);
+  const [walkersLoading, setWalkersLoading] = useState(true);
+  const [selectedWalkerId, setSelectedWalkerId] = useState("");
   const isLight = theme === "light";
 
   useEffect(() => {
     if (booking) {
       setFeedback(null);
-      setLoadingStatus(null);
+      setLoadingAction(null);
+      setSelectedWalkerId("");
     }
   }, [booking]);
 
   useEffect(() => {
+    if (!booking) return;
+
+    let cancelled = false;
+    setWalkersLoading(true);
+    setFeedback(null);
+
+    getWalkers({ available: true, bookingId: booking.id })
+      .then((data) => {
+        if (cancelled) return;
+        setWalkers(Array.isArray(data) ? data : []);
+        setFeedback(null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setWalkers([]);
+        setFeedback({ type: "error", message: "Could not load walkers." });
+      })
+      .finally(() => {
+        if (!cancelled) setWalkersLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [booking]);
+
+  useEffect(() => {
     const handleEscape = (e) => {
-      if (e.key === "Escape" && !loadingStatus) onClose();
+      if (e.key === "Escape" && !loadingAction) onClose();
     };
 
     document.addEventListener("keydown", handleEscape);
@@ -57,22 +84,49 @@ export default function BookingManagePanel({ booking, onClose, onStatusChange })
       document.removeEventListener("keydown", handleEscape);
       document.body.style.overflow = "";
     };
-  }, [loadingStatus, onClose]);
+  }, [loadingAction, onClose]);
 
   if (!booking) return null;
 
-  const handleAction = async (status) => {
-    if (loadingStatus || status === booking.status) return;
+  const canAssign = booking.status === "New" || booking.status === "Assigned";
+  const canUpdateStatus = booking.status === "Assigned";
 
-    setLoadingStatus(status);
+  const handleAssign = async () => {
+    if (!selectedWalkerId || loadingAction) return;
+
+    setLoadingAction("assign");
     setFeedback(null);
 
     try {
-      await onStatusChange(booking.id, status);
+      await onBookingUpdate(booking.id, {
+        status: "Assigned",
+        walker_id: Number(selectedWalkerId),
+      });
       setTimeout(onClose, 450);
-    } catch {
-      setFeedback({ type: "error", message: "Failed to update. Please try again." });
-      setLoadingStatus(null);
+    } catch (err) {
+      setFeedback({
+        type: "error",
+        message: err.message || "Failed to assign walker.",
+      });
+      setLoadingAction(null);
+    }
+  };
+
+  const handleStatusAction = async (status) => {
+    if (loadingAction || status === booking.status) return;
+
+    setLoadingAction(status);
+    setFeedback(null);
+
+    try {
+      await onBookingUpdate(booking.id, { status });
+      setTimeout(onClose, 450);
+    } catch (err) {
+      setFeedback({
+        type: "error",
+        message: err.message || "Failed to update. Please try again.",
+      });
+      setLoadingAction(null);
     }
   };
 
@@ -88,7 +142,7 @@ export default function BookingManagePanel({ booking, onClose, onStatusChange })
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
-          onClick={loadingStatus ? undefined : onClose}
+          onClick={loadingAction ? undefined : onClose}
         />
         <motion.div
           className="admin-manage__dialog"
@@ -112,7 +166,7 @@ export default function BookingManagePanel({ booking, onClose, onStatusChange })
               type="button"
               className="admin-manage__close"
               onClick={onClose}
-              disabled={Boolean(loadingStatus)}
+              disabled={Boolean(loadingAction)}
               aria-label="Close"
             >
               <FiX />
@@ -127,7 +181,7 @@ export default function BookingManagePanel({ booking, onClose, onStatusChange })
                   {DETAIL_ROWS.map(({ key, label }) => (
                     <div key={key} className="admin-manage__detail-row">
                       <dt>{label}</dt>
-                      <dd>{booking[key]}</dd>
+                      <dd>{booking[key] || "—"}</dd>
                     </div>
                   ))}
                   <div className="admin-manage__detail-row">
@@ -136,49 +190,126 @@ export default function BookingManagePanel({ booking, onClose, onStatusChange })
                       <StatusBadge status={booking.status} compact inModal />
                     </dd>
                   </div>
+                  {booking.assigned_walker && (
+                    <div className="admin-manage__detail-row">
+                      <dt>Assigned Walker</dt>
+                      <dd>{booking.assigned_walker}</dd>
+                    </div>
+                  )}
                 </dl>
               </div>
             </section>
 
-            <section className="admin-manage__panel">
-              <h4 className="admin-manage__panel-title">Update Status</h4>
-              <div className="admin-manage__status-cards" role="group" aria-label="Update status">
-                {STATUS_OPTIONS.map(({ status, label, description, variant }) => {
-                  const isLoading = loadingStatus === status;
-                  const isCurrent = booking.status === status;
+            {canAssign && (
+              <section className="admin-manage__panel">
+                <h4 className="admin-manage__panel-title">Assign Walker</h4>
+                {walkersLoading ? (
+                  <p className="admin-manage__hint">Loading available walkers...</p>
+                ) : walkers.length === 0 ? (
+                  <p className="admin-manage__hint">No walkers available right now.</p>
+                ) : (
+                  <div className="admin-walker-list" role="listbox" aria-label="Available walkers">
+                    {walkers.map((walker) => (
+                      <label
+                        key={walker.id}
+                        className={`admin-walker-option${
+                          selectedWalkerId === String(walker.id)
+                            ? " admin-walker-option--selected"
+                            : ""
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="walker"
+                          value={walker.id}
+                          checked={selectedWalkerId === String(walker.id)}
+                          onChange={() => setSelectedWalkerId(String(walker.id))}
+                          disabled={Boolean(loadingAction)}
+                        />
+                        <span className="admin-walker-option__body">
+                          <span className="admin-walker-option__name">{walker.name}</span>
+                          <span className="admin-walker-option__mobile">{walker.mobile}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--primary admin-manage__assign-btn"
+                  onClick={handleAssign}
+                  disabled={!selectedWalkerId || Boolean(loadingAction) || walkers.length === 0}
+                >
+                  {loadingAction === "assign"
+                    ? "Assigning..."
+                    : booking.status === "Assigned"
+                      ? "Reassign Walker"
+                      : "Assign Walker"}
+                </button>
+              </section>
+            )}
 
-                  return (
+            {(canUpdateStatus || booking.status === "New") && (
+              <section className="admin-manage__panel">
+                <h4 className="admin-manage__panel-title">Update Status</h4>
+                <div className="admin-manage__status-cards" role="group" aria-label="Update status">
+                  {booking.status === "New" && (
                     <button
-                      key={status}
                       type="button"
-                      className={`admin-manage__status-card admin-manage__status-card--${variant}${
-                        isCurrent ? " admin-manage__status-card--current" : ""
-                      }${isLoading ? " admin-manage__status-card--loading" : ""}`}
-                      onClick={() => handleAction(status)}
-                      disabled={Boolean(loadingStatus)}
+                      className={`admin-manage__status-card admin-manage__status-card--cancelled${
+                        loadingAction === "Cancelled" ? " admin-manage__status-card--loading" : ""
+                      }`}
+                      onClick={() => handleStatusAction("Cancelled")}
+                      disabled={Boolean(loadingAction)}
                     >
-                      <span className={`admin-manage__status-dot admin-manage__status-dot--${variant}`} />
+                      <span className="admin-manage__status-dot admin-manage__status-dot--cancelled" />
                       <span className="admin-manage__status-card-body">
-                        <span className="admin-manage__status-label">{label}</span>
-                        <span className="admin-manage__status-desc">{description}</span>
+                        <span className="admin-manage__status-label">Cancelled</span>
+                        <span className="admin-manage__status-desc">Decline this request</span>
                       </span>
-                      {isLoading && (
+                      {loadingAction === "Cancelled" && (
                         <span className="admin-manage__card-spinner" aria-label="Updating" />
                       )}
                     </button>
-                  );
-                })}
-              </div>
+                  )}
+                  {canUpdateStatus &&
+                    STATUS_OPTIONS.map(({ status, label, description, variant }) => {
+                      const isLoading = loadingAction === status;
+                      const isCurrent = booking.status === status;
 
-              {feedback && (
-                <div
-                  className={`admin-manage__feedback admin-manage__feedback--${feedback.type}`}
-                  role="alert"
-                >
-                  {feedback.message}
+                      return (
+                        <button
+                          key={status}
+                          type="button"
+                          className={`admin-manage__status-card admin-manage__status-card--${variant}${
+                            isCurrent ? " admin-manage__status-card--current" : ""
+                          }${isLoading ? " admin-manage__status-card--loading" : ""}`}
+                          onClick={() => handleStatusAction(status)}
+                          disabled={Boolean(loadingAction)}
+                        >
+                          <span className={`admin-manage__status-dot admin-manage__status-dot--${variant}`} />
+                          <span className="admin-manage__status-card-body">
+                            <span className="admin-manage__status-label">{label}</span>
+                            <span className="admin-manage__status-desc">{description}</span>
+                          </span>
+                          {isLoading && (
+                            <span className="admin-manage__card-spinner" aria-label="Updating" />
+                          )}
+                        </button>
+                      );
+                    })}
                 </div>
-              )}
-            </section>
+              </section>
+            )}
+
+            {feedback && !(feedback.type === "error" && walkers.length > 0) && (
+              <div
+                className={`admin-manage__feedback admin-manage__feedback--${feedback.type}`}
+                role="alert"
+              >
+                {feedback.message}
+              </div>
+            )}
           </div>
         </motion.div>
       </div>

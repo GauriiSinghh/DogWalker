@@ -5,6 +5,8 @@ import { getBookings, updateBooking } from "../services/adminApi";
 import Sidebar from "../components/Sidebar";
 import StatsCards from "../components/StatsCards";
 import BookingTable from "../components/BookingTable";
+import WalkersPanel from "../components/WalkersPanel";
+import CustomersPanel from "../components/CustomersPanel";
 import ThemeToggle from "../components/ThemeToggle";
 import { useAdminTheme } from "../hooks/useAdminTheme";
 import "../styles/admin.css";
@@ -123,14 +125,10 @@ const ws = new WebSocket(WS_URL);
 };
 }, []);
 
-  const updateBookingStatus = async (id, status) => {
-  try {
-    await updateBooking(id, { status });
+  const updateBookingRecord = async (id, data) => {
+    await updateBooking(id, data);
     fetchBookings();
-  } catch (err) {
-    console.error(err);
-  }
-};
+  };
 
   const filteredBookings = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -142,13 +140,23 @@ const ws = new WebSocket(WS_URL);
         booking.name?.toLowerCase().includes(query) ||
         booking.apartment?.toLowerCase().includes(query) ||
         booking.mobile?.toLowerCase().includes(query) ||
+        booking.assigned_walker?.toLowerCase().includes(query) ||
         booking.status?.toLowerCase().includes(query)
     );
   }, [bookings, searchQuery]);
 
   const showStats = activeSection === "dashboard" || activeSection === "bookings";
   const showTable = activeSection === "dashboard" || activeSection === "bookings";
-  const showPlaceholder = ["walkers", "customers", "settings"].includes(activeSection);
+  const showWalkers = activeSection === "walkers";
+  const showCustomers = activeSection === "customers";
+  const showPlaceholder = activeSection === "settings";
+
+  const searchPlaceholder =
+    activeSection === "walkers"
+      ? "Search walkers..."
+      : activeSection === "customers"
+        ? "Search customers..."
+        : "Search bookings...";
 
   const sectionTitles = {
     dashboard: { title: "Dashboard Overview", subtitle: "Monitor bookings and activity at a glance" },
@@ -198,7 +206,7 @@ const ws = new WebSocket(WS_URL);
               <input
                 type="search"
                 className="admin-header__search-input"
-                placeholder="Search bookings..."
+                placeholder={searchPlaceholder}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -229,9 +237,13 @@ const ws = new WebSocket(WS_URL);
               {showTable && (
                 <BookingTable
                   bookings={filteredBookings}
-                  onStatusChange={updateBookingStatus}
+                  onBookingUpdate={updateBookingRecord}
                 />
               )}
+
+              {showWalkers && <WalkersPanel searchQuery={searchQuery} />}
+
+              {showCustomers && <CustomersPanel searchQuery={searchQuery} />}
 
               {showPlaceholder && <PlaceholderPanel section={activeSection} />}
             </motion.div>
