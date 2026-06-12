@@ -36,6 +36,17 @@ with engine.connect() as conn:
           );
     """))
 
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS walkers (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            mobile VARCHAR(50) NOT NULL,
+            is_available BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        );
+    """))
+
     conn.commit()
 
 print("Database updated successfully")

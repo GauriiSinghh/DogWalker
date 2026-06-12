@@ -49,6 +49,9 @@ function BookingRow({ booking, isActive, onManage }) {
       <td className="admin-table__name" data-label="Name">{booking.name}</td>
       <td className="admin-table__cell-muted" data-label="Apartment">{booking.apartment}</td>
       <td className="admin-table__cell-muted" data-label="Mobile">{booking.mobile}</td>
+      <td className="admin-table__cell-muted" data-label="Walker">
+        {booking.assigned_walker || "—"}
+      </td>
       <td data-label="Status">
         <StatusBadge status={booking.status} />
       </td>
@@ -89,6 +92,12 @@ function BookingCard({ booking, index, isActive, onManage }) {
           <span className="admin-booking-card__label">Mobile</span>
           <span className="admin-booking-card__value">{booking.mobile}</span>
         </div>
+        <div className="admin-booking-card__row">
+          <span className="admin-booking-card__label">Walker</span>
+          <span className="admin-booking-card__value">
+            {booking.assigned_walker || "—"}
+          </span>
+        </div>
       </div>
 
       <div className="admin-booking-card__actions">
@@ -102,7 +111,7 @@ function BookingCard({ booking, index, isActive, onManage }) {
   );
 }
 
-export default function BookingTable({ bookings, onStatusChange }) {
+export default function BookingTable({ bookings, onBookingUpdate }) {
   const [activeFilter, setActiveFilter] = useState("all");
   const [managedBooking, setManagedBooking] = useState(null);
 
@@ -124,8 +133,8 @@ export default function BookingTable({ bookings, onStatusChange }) {
 
   const handleClosePanel = () => setManagedBooking(null);
 
-  const handleStatusChange = async (id, status) => {
-    await onStatusChange(id, status);
+  const handleBookingUpdate = async (id, data) => {
+    await onBookingUpdate(id, data);
   };
 
   const activeManagedBooking = managedBooking
@@ -175,6 +184,7 @@ export default function BookingTable({ bookings, onStatusChange }) {
                     <th scope="col">Name</th>
                     <th scope="col">Apartment</th>
                     <th scope="col">Mobile</th>
+                    <th scope="col">Walker</th>
                     <th scope="col">Status</th>
                     <th scope="col" className="admin-table__th-actions">Actions</th>
                   </tr>
@@ -211,7 +221,7 @@ export default function BookingTable({ bookings, onStatusChange }) {
         <BookingManagePanel
           booking={activeManagedBooking}
           onClose={handleClosePanel}
-          onStatusChange={handleStatusChange}
+          onBookingUpdate={handleBookingUpdate}
         />
       )}
     </div>

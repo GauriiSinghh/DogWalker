@@ -1,34 +1,73 @@
 import os
 import asyncio
+import logging
 from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import datetime, timedelta
 from fastapi.staticfiles import StaticFiles
 from db import engine, SessionLocal, get_db, Base
-from models import User, Pet, Booking, Page, Admin
-from schemas import UserCreate, UserLogin, UserResponse, BookingRequest, BookingResponse, BookingUpdate, PageResponse, AdminLogin
+from models import User, Pet, Walker, Booking, Page, Admin
+from schemas import (
+    UserCreate, UserLogin, UserResponse, BookingRequest, BookingResponse, BookingUpdate,
+    PageResponse, AdminLogin, WalkerResponse, WalkerCreate, WalkerDetailResponse,
+    CustomerSummary, CustomerDetailResponse, CustomerBookingSummary,
+)
 from auth import hash_password, verify_password, create_access_token, get_current_user, get_current_admin
 from email_service import send_booking_email, send_user_confirmation_email
 from websocket_manager import manager
+from sqlalchemy.exc import OperationalError
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Paws Pal Connect API")
+
+
+@app.on_event("startup")
+def init_database_tables():
+    """Create missing tables; retry for Neon cold starts / transient pooler drops."""
+    import time
+
+    last_error = None
+    for attempt in range(1, 4):
+        try:
+            Base.metadata.create_all(bind=engine)
+            if attempt > 1:
+                logger.info("Database tables ready (attempt %s)", attempt)
+            return
+        except OperationalError as exc:
+            last_error = exc
+            logger.warning(
+                "Database connection failed on startup (attempt %s/3): %s",
+                attempt,
+                exc,
+            )
+            if attempt < 3:
+                time.sleep(2 * attempt)
+
+    raise RuntimeError(
+        "Could not connect to the database after 3 attempts. "
+        "Check DATABASE_URL and your network, then restart the server."
+    ) from last_error
 app.mount(
     "/policies",
     StaticFiles(directory="policies"),
     name="policies"
 )
 
-# CORS
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://zuppy.onrender.com")
+# CORS — allow local dev, explicit FRONTEND_URL, and any Render frontend subdomain
+FRONTEND_URL = (os.getenv("FRONTEND_URL") or "https://zuppy.onrender.com").rstrip("/")
+CORS_ORIGINS = list({
+    FRONTEND_URL,
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "https://zuppy.onrender.com",
+})
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL, "http://localhost:5173",
-                   "http://localhost:5174",
-                   "https://zuppy.onrender.com"],
+    allow_origins=CORS_ORIGINS,
+    allow_origin_regex=r"https://.*\.onrender\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -45,51 +84,55 @@ def health_check():
 def signup(user_data: UserCreate, db: Session = Depends(get_db)):
     """Create a new user account"""
     print(f"Signup request for email: {user_data.email}")
-    
-    # Check if user already exists
+
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+            detail="Email already registered",
         )
-    
-    # Hash password and create user
-    hashed_pw = hash_password(user_data.password)
-    new_user = User(
-        email=user_data.email,
-        hashed_password=hashed_pw,
-        name=user_data.name,
-        mobile=user_data.mobile,
-        apartment=user_data.apartment,
-        flatNo=user_data.flatNo,
-        address=user_data.address,
-        pet_name=user_data.pet_name,
-        pet_image=user_data.pet_image,
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
 
-    pet = Pet(
-        user_id=new_user.id,
-        name=user_data.pet_name,
-        image_url=user_data.pet_image,
-    )
-    db.add(pet)
-    db.commit()
-    
-    # Create JWT token
-    access_token = create_access_token(data={"sub": str(new_user.id)})
-    
-    user_response = UserResponse.model_validate(new_user)
-    print(f"User {user_data.email} signed up successfully")
-    
-    return {
-        "user": user_response,
-        "access_token": access_token,
-        "token_type": "bearer"
-    }
+    try:
+        hashed_pw = hash_password(user_data.password)
+        new_user = User(
+            email=user_data.email,
+            hashed_password=hashed_pw,
+            name=user_data.name,
+            mobile=user_data.mobile,
+            apartment=user_data.apartment,
+            flatNo=user_data.flatNo,
+            address=user_data.address,
+            pet_name=user_data.pet_name,
+            pet_image=user_data.pet_image,
+        )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+
+        pet = Pet(
+            user_id=new_user.id,
+            name=user_data.pet_name,
+            image_url=user_data.pet_image,
+        )
+        db.add(pet)
+        db.commit()
+
+        access_token = create_access_token(data={"sub": str(new_user.id)})
+        user_response = UserResponse.model_validate(new_user)
+        print(f"User {user_data.email} signed up successfully")
+
+        return {
+            "user": user_response,
+            "access_token": access_token,
+            "token_type": "bearer",
+        }
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Database error during signup for %s", user_data.email)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not create account. Please try again.",
+        )
 
 @app.post("/login")
 def login(user_data: UserLogin, db: Session = Depends(get_db)):
@@ -153,6 +196,210 @@ def admin_login(
     }
 
 # ===== BOOKING ENDPOINT =====
+
+def _busy_walker_names(db: Session, exclude_booking_id: int | None = None) -> set[str]:
+    query = db.query(Booking.assigned_walker).filter(
+        Booking.status == "Assigned",
+        Booking.assigned_walker.isnot(None),
+    )
+    if exclude_booking_id is not None:
+        query = query.filter(Booking.id != exclude_booking_id)
+    return {row[0] for row in query.distinct().all()}
+
+
+def _set_walker_availability(db: Session, walker_name: str | None, available: bool) -> None:
+    if not walker_name:
+        return
+    walker = db.query(Walker).filter(Walker.name == walker_name).first()
+    if walker:
+        walker.is_available = available
+
+
+@app.get("/walkers", response_model=list[WalkerResponse])
+def get_walkers(
+    available: bool = False,
+    booking_id: int | None = None,
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    walkers = db.query(Walker).order_by(Walker.name).all()
+    if not available:
+        return walkers
+
+    busy = _busy_walker_names(db, exclude_booking_id=booking_id)
+    current_walker_name = None
+    if booking_id is not None:
+        booking = db.query(Booking).filter(Booking.id == booking_id).first()
+        if booking:
+            current_walker_name = booking.assigned_walker
+
+    return [
+        w for w in walkers
+        if w.name not in busy
+        and (w.is_available or w.name == current_walker_name)
+    ]
+
+
+def _walker_stats(db: Session, walker: Walker) -> dict:
+    active = db.query(Booking).filter(
+        Booking.assigned_walker == walker.name,
+        Booking.status == "Assigned",
+    ).count()
+    total = db.query(Booking).filter(
+        Booking.assigned_walker == walker.name,
+    ).count()
+    return {"active_assignments": active, "total_assignments": total}
+
+
+@app.get("/walkers/{walker_id}", response_model=WalkerDetailResponse)
+def get_walker(
+    walker_id: int,
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    walker = db.query(Walker).filter(Walker.id == walker_id).first()
+    if not walker:
+        raise HTTPException(status_code=404, detail="Walker not found")
+
+    stats = _walker_stats(db, walker)
+    return WalkerDetailResponse(
+        **WalkerResponse.model_validate(walker).model_dump(),
+        **stats,
+        created_at=walker.created_at,
+    )
+
+
+@app.post("/walkers", response_model=WalkerResponse, status_code=status.HTTP_201_CREATED)
+def create_walker(
+    data: WalkerCreate,
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    name = data.name.strip()
+    mobile = data.mobile.strip()
+    if len(name) < 2:
+        raise HTTPException(status_code=400, detail="Walker name is required")
+    if not mobile:
+        raise HTTPException(status_code=400, detail="Mobile number is required")
+
+    existing = db.query(Walker).filter(Walker.name == name).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="A walker with this name already exists")
+
+    walker = Walker(name=name, mobile=mobile, is_available=data.is_available)
+    db.add(walker)
+    db.commit()
+    db.refresh(walker)
+    return walker
+
+
+@app.delete("/walkers/{walker_id}")
+def delete_walker(
+    walker_id: int,
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    walker = db.query(Walker).filter(Walker.id == walker_id).first()
+    if not walker:
+        raise HTTPException(status_code=404, detail="Walker not found")
+
+    active = db.query(Booking).filter(
+        Booking.assigned_walker == walker.name,
+        Booking.status == "Assigned",
+    ).first()
+    if active:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot remove a walker with an active booking assignment",
+        )
+
+    db.delete(walker)
+    db.commit()
+    return {"message": "Walker removed successfully"}
+
+
+def _build_customer_summaries(db: Session) -> list[CustomerSummary]:
+    bookings = db.query(Booking).order_by(Booking.created_at.desc()).all()
+    grouped: dict[str, dict] = {}
+
+    for booking in bookings:
+        email = booking.email.lower()
+        if email not in grouped:
+            grouped[email] = {
+                "email": booking.email,
+                "name": booking.name,
+                "mobile": booking.mobile,
+                "apartment": booking.apartment,
+                "flatNo": booking.flatNo,
+                "address": booking.address,
+                "user_id": booking.user_id,
+                "booking_count": 0,
+                "last_booking_at": booking.created_at,
+            }
+        grouped[email]["booking_count"] += 1
+
+    customers: list[CustomerSummary] = []
+    for data in grouped.values():
+        pet_name = None
+        if data["user_id"]:
+            user = db.query(User).filter(User.id == data["user_id"]).first()
+            if user:
+                data["name"] = user.name
+                data["mobile"] = user.mobile
+                data["apartment"] = user.apartment
+                data["flatNo"] = user.flatNo
+                data["address"] = user.address
+                pet_name = user.pet_name
+
+        customers.append(CustomerSummary(pet_name=pet_name, **data))
+
+    customers.sort(
+        key=lambda c: c.last_booking_at or datetime.min.replace(tzinfo=None),
+        reverse=True,
+    )
+    return customers
+
+
+@app.get("/customers", response_model=list[CustomerSummary])
+def get_customers(
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return _build_customer_summaries(db)
+
+
+@app.get("/customers/detail", response_model=CustomerDetailResponse)
+def get_customer_detail(
+    email: str,
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    summaries = _build_customer_summaries(db)
+    match = next((c for c in summaries if c.email.lower() == email.lower()), None)
+    if not match:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    customer_bookings = (
+        db.query(Booking)
+        .filter(Booking.email.ilike(email))
+        .order_by(Booking.created_at.desc())
+        .all()
+    )
+
+    return CustomerDetailResponse(
+        **match.model_dump(),
+        bookings=[
+            CustomerBookingSummary(
+                id=b.id,
+                status=b.status,
+                apartment=b.apartment,
+                assigned_walker=b.assigned_walker,
+                created_at=b.created_at,
+            )
+            for b in customer_bookings
+        ],
+    )
+
 
 @app.post("/book")
 async def create_booking(
@@ -266,10 +513,43 @@ async def update_booking(
             detail="Booking not found"
         )
 
+    previous_walker = booking.assigned_walker
+
+    if update.status == "Assigned":
+        walker = None
+        if update.walker_id is not None:
+            walker = db.query(Walker).filter(Walker.id == update.walker_id).first()
+        elif update.assigned_walker:
+            walker = db.query(Walker).filter(Walker.name == update.assigned_walker).first()
+
+        if not walker:
+            raise HTTPException(
+                status_code=400,
+                detail="Select a walker to assign this booking",
+            )
+
+        busy = _busy_walker_names(db, exclude_booking_id=booking_id)
+        if walker.name in busy:
+            raise HTTPException(
+                status_code=400,
+                detail="Walker is already assigned to another active booking",
+            )
+        if not walker.is_available:
+            raise HTTPException(
+                status_code=400,
+                detail="Walker is not available",
+            )
+
+        if previous_walker and previous_walker != walker.name:
+            _set_walker_availability(db, previous_walker, True)
+
+        booking.assigned_walker = walker.name
+        walker.is_available = False
+
     booking.status = update.status
 
-    if update.assigned_walker:
-        booking.assigned_walker = update.assigned_walker
+    if update.status in ("Completed", "Cancelled"):
+        _set_walker_availability(db, booking.assigned_walker, True)
 
     db.commit()
     db.refresh(booking)
