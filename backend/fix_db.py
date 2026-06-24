@@ -70,6 +70,10 @@ with engine.connect() as conn:
         );
     """))
 
+    conn.execute(text("""
+        ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS amount INTEGER DEFAULT 0;
+    """))
     conn.commit()
 
 print("Database updated successfully")
