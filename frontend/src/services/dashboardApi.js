@@ -31,3 +31,15 @@ export async function getDailyRevenue(days = 30) {
   if (!res.ok) throw new Error("Could not load daily revenue");
   return res.json();
 }
+
+/**
+ * GET /api/dashboard/stats
+ * -> { total_bookings: number, new_bookings: number, assigned_bookings: number, completed_bookings: number }
+ */
+export async function getDashboardStats() {
+  const res = await fetch(`${API_BASE}/api/dashboard/stats`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Could not load dashboard stats");
+  return res.json();
+}

@@ -62,7 +62,7 @@ async function verifyPayment(bookingId, paymentResponse, token) {
 
 export async function payForBooking({ bookingId, token, user, name, email, mobile }) {
   if (!RAZORPAY_KEY_ID) {
-    throw new Error("Payment is not configured. Please contact support.");
+    throw new Error(" not configured. Please contact support.");
   }
 
   const scriptLoaded = await loadRazorpayScript();

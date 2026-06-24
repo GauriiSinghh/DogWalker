@@ -10,7 +10,7 @@ import CustomersPanel from "../components/CustomersPanel";
 import ThemeToggle from "../components/ThemeToggle";
 import { useAdminTheme } from "../hooks/useAdminTheme";
 import "../styles/admin.css";
-import { getTotalRevenue } from "../services/dashboardApi";
+import { getTotalRevenue, getDashboardStats } from "../services/dashboardApi";
 import RevenueChart from "../components/RevenueChart";
 
 
@@ -72,6 +72,7 @@ export default function AdminDashboard() {
   const { theme, toggleTheme } = useAdminTheme();
   const [bookings, setBookings] = useState([]);
   const [revenue, setRevenue] = useState(null);
+  const [stats, setStats] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSection, setActiveSection] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -96,9 +97,19 @@ export default function AdminDashboard() {
         console.error(err);
       });
     };
+  const fetchStats = () => {
+    getDashboardStats()
+      .then((data) => {
+        setStats(data);
+      })
+      .catch((err) => {
+        console.error(err);
+      });
+  };
   useEffect(() => {
     fetchBookings();
     fetchRevenue();
+    fetchStats();
   }, []);
 
   useEffect(() => {
@@ -119,6 +130,8 @@ const ws = new WebSocket(WS_URL);
     console.log("📩 WS Message:", data);
 
     fetchBookings(); // refresh bookings automatically
+    fetchStats();
+    fetchRevenue();
   };
 
   ws.onclose = () => {
@@ -142,6 +155,8 @@ const ws = new WebSocket(WS_URL);
   const updateBookingRecord = async (id, data) => {
     await updateBooking(id, data);
     fetchBookings();
+    fetchStats();
+    fetchRevenue();
   };
 
   const filteredBookings = useMemo(() => {
@@ -249,7 +264,7 @@ const ws = new WebSocket(WS_URL);
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.25 }}
             >
-              {showStats && <StatsCards bookings={bookings} revenue={revenue}  />}
+              {showStats && <StatsCards statsData={stats} revenue={revenue}  />}
  {showChart && <RevenueChart days={30} />}
 
               {showTable && (

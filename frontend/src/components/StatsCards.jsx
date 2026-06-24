@@ -41,11 +41,11 @@ function formatRevenue(amount, currency = "INR") {
   })}`;
 }
 
-export default function StatsCards({ bookings, revenue }) {
-  const total = bookings.length;
-  const newCount = bookings.filter((b) => b.status === "New").length;
-  const assignedCount = bookings.filter((b) => b.status === "Assigned").length;
-  const completedCount = bookings.filter((b) => b.status === "Completed").length;
+export default function StatsCards({ statsData, revenue }) {
+  const total = statsData?.total_bookings ?? 0;
+  const newCount = statsData?.new_bookings ?? 0;
+  const assignedCount = statsData?.assigned_bookings ?? 0;
+  const completedCount = statsData?.completed_bookings ?? 0;
 
   const stats = [
     {
