@@ -27,8 +27,18 @@ function Profile({ view = "profile" }) {
   const navigate = useNavigate();
   const { updateUser } = useAuth();
 
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState({
+  name: "",
+  email: "",
+  mobile: "",
+  apartment: "",
+  flatNo: "",
+  address: "",
+  pet_name: "",
+  pet_image: "",
+});
+
+const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
 
   const [editPersonal, setEditPersonal] = useState(false);
@@ -288,17 +298,7 @@ function Profile({ view = "profile" }) {
   };
   const fmtAmount = (paise) => (paise == null ? "—" : `₹${(paise / 100).toFixed(0)}`);
 
-  if (loading) {
-    return (
-      <div className="auth-page">
-        <div className="auth-card">
-          <div className="auth-body" style={{ textAlign: "center", padding: "40px 24px" }}>
-            <p style={{ fontWeight: 600, color: "var(--z-muted)" }}>Loading profile…</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  
 
   if (loadError) {
     return (

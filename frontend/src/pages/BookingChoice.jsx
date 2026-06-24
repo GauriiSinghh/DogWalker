@@ -29,6 +29,13 @@ function BookingChoice() {
     if (!user) navigate("/login");
   }, [user, navigate]);
 
+  useEffect(() => {
+  const script = document.createElement("script");
+  script.src = "https://checkout.razorpay.com/v1/checkout.js";
+  script.async = true;
+  document.body.appendChild(script);
+}, []);
+
   const handleBookForMyself = async () => {
     setLoading(true);
     setErrorMsg("");
@@ -37,27 +44,7 @@ function BookingChoice() {
 
       // Single source of truth: pull the freshest profile, sync context,
       // and submit those exact values (covers edits made just before booking).
-      let current = user;
-      try {
-        const profileRes = await fetch(`${API_BASE}/profile`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (profileRes.ok) {
-          const fresh = await profileRes.json();
-          current = {
-            ...user,
-            name: fresh.name ?? user.name,
-            email: fresh.email ?? user.email,
-            mobile: fresh.mobile ?? user.mobile,
-            apartment: fresh.apartment ?? user.apartment,
-            flatNo: fresh.flatNo ?? user.flatNo,
-            address: fresh.address ?? user.address,
-          };
-          updateUser(current); // keep global state in sync
-        }
-      } catch {
-        // network hiccup — fall back to live context user
-      }
+     const current = user;
 
       const response = await fetch(`${API_BASE}/book`, {
         method: "POST",
