@@ -79,15 +79,20 @@ export default function AdminDashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
 
-  const fetchBookings = () => {
-    getBookings()
-      .then((data) => {
-        setBookings(data);
-      })
-      .catch((err) => {
-        console.error(err);
-      });
-  };
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+
+const fetchBookings = (currentPage = page) => {
+  getBookings(currentPage, 10)
+    .then((data) => {
+      setBookings(data.bookings);
+      setTotalPages(data.total_pages);
+    })
+    .catch((err) => {
+      console.error(err);
+    });
+};
+
   const fetchRevenue = () => {
     getTotalRevenue()
       .then((data) => {
@@ -110,7 +115,7 @@ export default function AdminDashboard() {
     fetchBookings();
     fetchRevenue();
     fetchStats();
-  }, []);
+  }, [page]);
 
   useEffect(() => {
   const WS_URL =
@@ -267,12 +272,40 @@ const ws = new WebSocket(WS_URL);
               {showStats && <StatsCards statsData={stats} revenue={revenue}  />}
  {showChart && <RevenueChart days={30} />}
 
-              {showTable && (
-                <BookingTable
-                  bookings={filteredBookings}
-                  onBookingUpdate={updateBookingRecord}
-                />
-              )}
+             {showTable && (
+  <>
+    <BookingTable
+      bookings={filteredBookings}
+      onBookingUpdate={updateBookingRecord}
+    />
+
+    <div className="pagination">
+      <button
+        disabled={page === 1}
+        onClick={() => setPage(page - 1)}
+      >
+        ‹
+      </button>
+
+      {Array.from({ length: totalPages }, (_, i) => (
+        <button
+          key={i + 1}
+          className={page === i + 1 ? "active" : ""}
+          onClick={() => setPage(i + 1)}
+        >
+          {i + 1}
+        </button>
+      ))}
+
+      <button
+        disabled={page === totalPages}
+        onClick={() => setPage(page + 1)}
+      >
+        ›
+      </button>
+    </div>
+  </>
+)}
 
               {showWalkers && <WalkersPanel searchQuery={searchQuery} />}
 

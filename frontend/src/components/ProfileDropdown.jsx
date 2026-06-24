@@ -41,8 +41,7 @@ export default function ProfileDropdown() {
 
   const handleMyBookings = () => {
     setOpen(false);
-    // Booking history lives within the Profile page sections.
-    navigate("/profile", { state: { focus: "bookings" } });
+    navigate("/my-bookings");
   };
 
   const handleLogout = () => {

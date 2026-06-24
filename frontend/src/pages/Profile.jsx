@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, Link } from "react-router-dom";
-import { FaTimes } from "react-icons/fa";
+import { FaTimes, FaCalendarAlt, FaUser, FaPaw } from "react-icons/fa";
 import { useAuth } from "../hooks/useAuth.js";
 import { API_BASE } from "../config/api.js";
 import logo from "../assets/images/logo.png";
@@ -23,15 +23,14 @@ function authHeaders() {
   return { Authorization: `Bearer ${token}` };
 }
 
-function Profile() {
+function Profile({ view = "profile" }) {
   const navigate = useNavigate();
-  const { logout, updateUser } = useAuth();
+  const { updateUser } = useAuth();
 
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
-  // ---- Personal info edit state ----
   const [editPersonal, setEditPersonal] = useState(false);
   const [form, setForm] = useState({
     name: "", email: "", mobile: "", apartment: "", flatNo: "", address: "",
@@ -40,7 +39,6 @@ function Profile() {
   const [personalError, setPersonalError] = useState("");
   const [personalSuccess, setPersonalSuccess] = useState("");
 
-  // ---- Pet info edit state ----
   const [editPet, setEditPet] = useState(false);
   const [petName, setPetName] = useState("");
   const [petImage, setPetImage] = useState("");
@@ -50,7 +48,6 @@ function Profile() {
   const [petError, setPetError] = useState("");
   const [petSuccess, setPetSuccess] = useState("");
 
-  // ---- Booking history ----
   const [bookings, setBookings] = useState([]);
   const [historyError, setHistoryError] = useState("");
   const [expandedId, setExpandedId] = useState(null);
@@ -80,7 +77,6 @@ function Profile() {
       });
       setPetName(data.pet_name || "");
       setPetImagePreview(data.pet_image || "");
-      // Keep global context in sync with the freshest server data.
       updateUser({
         name: data.name || "",
         email: data.email || "",
@@ -111,10 +107,11 @@ function Profile() {
   useEffect(() => {
     window.scrollTo(0, 0);
     loadProfile();
-    loadHistory();
-  }, [loadProfile, loadHistory]);
+    if (view === "bookings") {
+      loadHistory();
+    }
+  }, [loadProfile, loadHistory, view]);
 
-  // ---- Personal info handlers ----
   function validatePersonal() {
     if (form.name.trim().length < 2) return false;
     if (!form.email || !form.email.includes("@")) return false;
@@ -146,8 +143,6 @@ function Profile() {
       return;
     }
     try {
-      // Task 2: update via PUT /api/users/{user_id} when we know the id,
-      // otherwise fall back to the existing PATCH /profile endpoint.
       let res;
       if (profile?.id != null) {
         res = await fetch(`${API_BASE}/api/users/${profile.id}`, {
@@ -165,7 +160,6 @@ function Profile() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Update failed");
       setProfile(data);
-      // Immediately propagate to global user state (single source of truth).
       updateUser({
         name: data.name,
         email: data.email,
@@ -197,7 +191,6 @@ function Profile() {
     setEditPersonal(false);
   }
 
-  // ---- Pet handlers ----
   function handlePetImageChange(e) {
     const file = e.target.files?.[0];
     setPetImageError("");
@@ -249,7 +242,6 @@ function Profile() {
       setPetImagePreview(data.pet_image || "");
       setPetImageChanged(false);
       setEditPet(false);
-      // Keep pet info in the global context too.
       updateUser({ pet_name: data.pet_name || "", pet_image: data.pet_image || "" });
       setPetSuccess("Pet info updated!");
       setTimeout(() => setPetSuccess(""), 3000);
@@ -268,7 +260,6 @@ function Profile() {
     setEditPet(false);
   }
 
-  // ---- Booking detail ----
   async function toggleDetail(id) {
     if (expandedId === id) {
       setExpandedId(null);
@@ -289,11 +280,6 @@ function Profile() {
     }
   }
 
-  function handleLogout() {
-    logout();
-    navigate("/");
-  }
-
   const fmtDate = (iso) => {
     if (!iso) return "—";
     return new Date(iso).toLocaleDateString("en-IN", {
@@ -306,8 +292,8 @@ function Profile() {
     return (
       <div className="auth-page">
         <div className="auth-card">
-          <div className="auth-body">
-            <p>Loading profile…</p>
+          <div className="auth-body" style={{ textAlign: "center", padding: "40px 24px" }}>
+            <p style={{ fontWeight: 600, color: "var(--z-muted)" }}>Loading profile…</p>
           </div>
         </div>
       </div>
@@ -318,7 +304,7 @@ function Profile() {
     return (
       <div className="auth-page">
         <div className="auth-card">
-          <div className="auth-body">
+          <div className="auth-body" style={{ padding: "40px 24px" }}>
             <div className="global-error">{loadError}</div>
             <button className="btn btn-outline" onClick={() => navigate("/")}>Go Home</button>
           </div>
@@ -328,239 +314,340 @@ function Profile() {
   }
 
   return (
-    <div className="auth-page">
+    <div className="auth-page" style={{ padding: "40px 16px" }}>
       <motion.div
         className="auth-card"
         initial="initial"
         animate="animate"
         exit="exit"
         variants={pageTransition}
-        style={{ marginBottom: 24 }}
+        style={{
+          maxWidth: view === "bookings" ? "880px" : "640px",
+          width: "100%",
+          marginBottom: 24,
+          borderRadius: "24px",
+          boxShadow: "0 20px 50px rgba(15, 17, 21, 0.08)",
+          border: "1px solid rgba(255, 255, 255, 0.8)",
+          background: "rgba(255, 255, 255, 0.95)",
+        }}
       >
-        <div className="auth-header">
-          <Link to="/" className="auth-header-logo">
-            <img src={logo} alt="Zuppy" />
-          </Link>
-          <Link to="/" className="auth-close" aria-label="Close">
+        <div className="auth-header" style={{ padding: "24px 32px 16px", borderBottom: "1px solid rgba(0, 0, 0, 0.04)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <Link to="/" className="auth-header-logo">
+              <img src={logo} alt="Zuppy" style={{ height: "32px", width: "auto" }} />
+            </Link>
+          </div>
+          <Link to="/" className="auth-close" aria-label="Close" style={{ textDecoration: "none" }}>
             <FaTimes size={16} />
           </Link>
         </div>
 
-        {/* ===== SECTION 1: PERSONAL INFO ===== */}
-        <div className="auth-body">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h1 className="auth-title">Personal Information</h1>
-            {!editPersonal && (
-              <button className="btn btn-outline" type="button" onClick={() => setEditPersonal(true)}>
-                Edit
-              </button>
-            )}
-          </div>
-
-          {personalError && <div className="global-error">{personalError}</div>}
-          {personalSuccess && <div className="global-success">{personalSuccess}</div>}
-
-          <form className="auth-form" style={{ marginTop: 16 }} onSubmit={(e) => { e.preventDefault(); savePersonal(); }} noValidate>
-            <div className="form-group">
-              <label className="form-label">Full Name</label>
-              <input
-                className={`form-input ${showErrors && form.name.trim().length < 2 ? "invalid" : ""}`}
-                value={form.name}
-                disabled={!editPersonal}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-              />
-              {showErrors && form.name.trim().length < 2 && <div className="field-error-msg">Enter your full name</div>}
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Email</label>
-                <input
-                  className={`form-input ${showErrors && (!form.email || !form.email.includes("@")) ? "invalid" : ""}`}
-                  value={form.email}
-                  disabled={!editPersonal}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                />
-                {showErrors && (!form.email || !form.email.includes("@")) && <div className="field-error-msg">Enter a valid email</div>}
-              </div>
-              <div className="form-group">
-                <label className="form-label">Mobile Number</label>
-                <input
-                  className={`form-input ${showErrors && !/^(\+91|91)?[6-9]\d{9}$/.test(form.mobile.trim()) ? "invalid" : ""}`}
-                  value={form.mobile}
-                  disabled={!editPersonal}
-                  onChange={(e) => setForm({ ...form, mobile: e.target.value })}
-                />
-                {showErrors && !/^(\+91|91)?[6-9]\d{9}$/.test(form.mobile.trim()) && <div className="field-error-msg">Enter a valid mobile number</div>}
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Apartment</label>
-              <select
-                className={`form-select ${showErrors && !form.apartment ? "invalid" : ""}`}
-                value={form.apartment}
-                disabled={!editPersonal}
-                onChange={(e) => setForm({ ...form, apartment: e.target.value })}
-              >
-                <option value="">-- Choose Apartment --</option>
-                {APARTMENTS.map((a) => <option key={a} value={a}>{a}</option>)}
-              </select>
-              {showErrors && !form.apartment && <div className="field-error-msg">Please select an apartment</div>}
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Flat / Villa Number</label>
-                <input
-                  className={`form-input ${showErrors && !form.flatNo.trim() ? "invalid" : ""}`}
-                  value={form.flatNo}
-                  disabled={!editPersonal}
-                  onChange={(e) => setForm({ ...form, flatNo: e.target.value })}
-                />
-                {showErrors && !form.flatNo.trim() && <div className="field-error-msg">Enter flat/villa number</div>}
-              </div>
-              <div className="form-group">
-                <label className="form-label">Detailed Address</label>
-                <input
-                  className={`form-input ${showErrors && form.address.trim().length < 10 ? "invalid" : ""}`}
-                  value={form.address}
-                  disabled={!editPersonal}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })}
-                />
-                {showErrors && form.address.trim().length < 10 && <div className="field-error-msg">Please enter a detailed address</div>}
-              </div>
-            </div>
-
-            {editPersonal && (
-              <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
-                <button type="submit" className="btn-primary">Save</button>
-                <button type="button" className="btn btn-outline" onClick={cancelPersonal}>Cancel</button>
-              </div>
-            )}
-          </form>
-        </div>
-      </motion.div>
-
-      {/* ===== SECTION 2: PET INFO ===== */}
-      <motion.div className="auth-card" variants={pageTransition} initial="initial" animate="animate" style={{ marginBottom: 24 }}>
-        <div className="auth-body">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h1 className="auth-title">Pet Information</h1>
-            {!editPet && (
-              <button className="btn btn-outline" type="button" onClick={() => setEditPet(true)}>Edit</button>
-            )}
-          </div>
-
-          {petError && <div className="global-error">{petError}</div>}
-          {petSuccess && <div className="global-success">{petSuccess}</div>}
-
-          <div className="auth-form" style={{ marginTop: 16 }}>
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Pet Name</label>
-                <input
-                  className={`form-input ${editPet && petName.trim().length < 2 ? "invalid" : ""}`}
-                  value={petName}
-                  disabled={!editPet}
-                  onChange={(e) => setPetName(e.target.value)}
-                  placeholder="Bruno"
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Pet Photo</label>
-                <div className="pet-image-upload">
-                  {editPet && (
-                    <input id="profile-pet-image" type="file" accept="image/*" className="pet-image-input" onChange={handlePetImageChange} />
-                  )}
-                  <label htmlFor="profile-pet-image" className="pet-image-label">
-                    {petImagePreview ? (
-                      <img src={petImagePreview} alt="Pet" className="pet-image-preview" />
-                    ) : (
-                      <span>{editPet ? "Upload a photo" : "No photo"}</span>
-                    )}
-                  </label>
+        {view === "profile" && (
+          <div className="auth-body" style={{ padding: "32px 32px 40px", gap: "32px" }}>
+            <div style={{ background: "#ffffff", borderRadius: "16px", border: "1px solid rgba(0,0,0,0.04)", padding: "24px", boxShadow: "0 4px 12px rgba(0,0,0,0.01)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <FaUser style={{ color: "var(--z-primary)", fontSize: "1.1rem" }} />
+                  <h2 style={{ fontSize: "1.25rem", fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>Personal Details</h2>
                 </div>
-                {petImageError && <div className="field-error-msg">{petImageError}</div>}
+                {!editPersonal && (
+                  <button
+                    className="btn btn-outline"
+                    type="button"
+                    onClick={() => setEditPersonal(true)}
+                    style={{ padding: "6px 14px", fontSize: "0.85rem", height: "auto" }}
+                  >
+                    Edit Profile
+                  </button>
+                )}
               </div>
+
+              {personalError && <div className="global-error">{personalError}</div>}
+              {personalSuccess && <div className="global-success">{personalSuccess}</div>}
+
+              <form className="auth-form" onSubmit={(e) => { e.preventDefault(); savePersonal(); }} noValidate>
+                <div className="form-group">
+                  <label className="form-label">Full Name</label>
+                  <input
+                    className={`form-input ${showErrors && form.name.trim().length < 2 ? "invalid" : ""}`}
+                    value={form.name}
+                    disabled={!editPersonal}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  />
+                  {showErrors && form.name.trim().length < 2 && <div className="field-error-msg">Enter your full name</div>}
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Email Address</label>
+                    <input
+                      className={`form-input ${showErrors && (!form.email || !form.email.includes("@")) ? "invalid" : ""}`}
+                      value={form.email}
+                      disabled={!editPersonal}
+                      onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    />
+                    {showErrors && (!form.email || !form.email.includes("@")) && <div className="field-error-msg">Enter a valid email</div>}
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Mobile Number</label>
+                    <input
+                      className={`form-input ${showErrors && !/^(\+91|91)?[6-9]\d{9}$/.test(form.mobile.trim()) ? "invalid" : ""}`}
+                      value={form.mobile}
+                      disabled={!editPersonal}
+                      onChange={(e) => setForm({ ...form, mobile: e.target.value })}
+                    />
+                    {showErrors && !/^(\+91|91)?[6-9]\d{9}$/.test(form.mobile.trim()) && <div className="field-error-msg">Enter valid mobile number</div>}
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Apartment Complex</label>
+                  <select
+                    className={`form-select ${showErrors && !form.apartment ? "invalid" : ""}`}
+                    value={form.apartment}
+                    disabled={!editPersonal}
+                    onChange={(e) => setForm({ ...form, apartment: e.target.value })}
+                  >
+                    <option value="">-- Choose Apartment --</option>
+                    {APARTMENTS.map((a) => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                  {showErrors && !form.apartment && <div className="field-error-msg">Please select an apartment</div>}
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Flat / Villa Number</label>
+                    <input
+                      className={`form-input ${showErrors && !form.flatNo.trim() ? "invalid" : ""}`}
+                      value={form.flatNo}
+                      disabled={!editPersonal}
+                      onChange={(e) => setForm({ ...form, flatNo: e.target.value })}
+                    />
+                    {showErrors && !form.flatNo.trim() && <div className="field-error-msg">Enter flat/villa number</div>}
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Detailed Address</label>
+                    <input
+                      className={`form-input ${showErrors && form.address.trim().length < 10 ? "invalid" : ""}`}
+                      value={form.address}
+                      disabled={!editPersonal}
+                      onChange={(e) => setForm({ ...form, address: e.target.value })}
+                    />
+                    {showErrors && form.address.trim().length < 10 && <div className="field-error-msg">Please enter detailed address (min 10 chars)</div>}
+                  </div>
+                </div>
+
+                {editPersonal && (
+                  <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
+                    <button type="submit" className="btn-primary" style={{ minHeight: "44px", padding: "10px 24px", width: "auto" }}>Save Changes</button>
+                    <button type="button" className="btn btn-outline" onClick={cancelPersonal} style={{ height: "44px", width: "auto" }}>Cancel</button>
+                  </div>
+                )}
+              </form>
             </div>
 
-            {editPet && (
-              <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
-                <button type="button" className="btn-primary" onClick={savePet}>Save</button>
-                <button type="button" className="btn btn-outline" onClick={cancelPet}>Cancel</button>
+            <div style={{ background: "#ffffff", borderRadius: "16px", border: "1px solid rgba(0,0,0,0.04)", padding: "24px", boxShadow: "0 4px 12px rgba(0,0,0,0.01)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <FaPaw style={{ color: "var(--z-primary)", fontSize: "1.1rem" }} />
+                  <h2 style={{ fontSize: "1.25rem", fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>Pet Information</h2>
+                </div>
+                {!editPet && (
+                  <button
+                    className="btn btn-outline"
+                    type="button"
+                    onClick={() => setEditPet(true)}
+                    style={{ padding: "6px 14px", fontSize: "0.85rem", height: "auto" }}
+                  >
+                    Edit Pet
+                  </button>
+                )}
               </div>
-            )}
-          </div>
-        </div>
-      </motion.div>
 
-      {/* ===== SECTION 3: BOOKING HISTORY ===== */}
-      <motion.div className="auth-card" variants={pageTransition} initial="initial" animate="animate" style={{ marginBottom: 24 }}>
-        <div className="auth-body">
-          <h1 className="auth-title">Booking History</h1>
-          {historyError && <div className="global-error">{historyError}</div>}
+              {petError && <div className="global-error">{petError}</div>}
+              {petSuccess && <div className="global-success">{petSuccess}</div>}
 
-          {bookings.length === 0 && !historyError && (
-            <p className="auth-subtitle" style={{ marginTop: 12 }}>No bookings yet.</p>
-          )}
+              <div className="auth-form">
+                <div className="form-row" style={{ alignItems: "center" }}>
+                  <div className="form-group">
+                    <label className="form-label">Pet Name</label>
+                    <input
+                      className={`form-input ${editPet && petName.trim().length < 2 ? "invalid" : ""}`}
+                      value={petName}
+                      disabled={!editPet}
+                      onChange={(e) => setPetName(e.target.value)}
+                      placeholder="Bruno"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Pet Photo</label>
+                    <div className="pet-image-upload">
+                      {editPet && (
+                        <input id="profile-pet-image" type="file" accept="image/*" className="pet-image-input" onChange={handlePetImageChange} />
+                      )}
+                      <label htmlFor="profile-pet-image" className="pet-image-label" style={{ height: "80px", borderRadius: "16px" }}>
+                        {petImagePreview ? (
+                          <img src={petImagePreview} alt="Pet" className="pet-image-preview" style={{ height: "80px", width: "100%", objectFit: "cover" }} />
+                        ) : (
+                          <span style={{ fontSize: "0.85rem" }}>{editPet ? "Upload a photo" : "No photo available"}</span>
+                        )}
+                      </label>
+                    </div>
+                    {petImageError && <div className="field-error-msg">{petImageError}</div>}
+                  </div>
+                </div>
 
-          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-            {bookings.map((b) => (
-              <div key={b.id} className="profile-booking-row" style={{ border: "1px solid #f0e4d8", borderRadius: 14, overflow: "hidden" }}>
-                <button
-                  type="button"
-                  onClick={() => toggleDetail(b.id)}
-                  style={{
-                    width: "100%", textAlign: "left", background: "#fffaf5", border: "none",
-                    cursor: "pointer", padding: "14px 16px", fontFamily: "inherit",
-                    display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr auto", gap: 10, alignItems: "center",
-                  }}
-                >
-                  <span><strong>{fmtDate(b.created_at)}</strong></span>
-                  <span>{b.status}</span>
-                  <span>{b.payment_status || "—"}</span>
-                  <span>{b.assigned_walker || "Unassigned"}</span>
-                  <span style={{ textAlign: "right", fontWeight: 700 }}>{fmtAmount(b.amount)}</span>
-                </button>
-
-                {expandedId === b.id && (
-                  <div style={{ padding: "14px 16px", borderTop: "1px dashed rgba(0,0,0,0.08)" }}>
-                    {detailLoading && !detailCache[b.id] ? (
-                      <p>Loading…</p>
-                    ) : detailCache[b.id] ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: "0.92rem" }}>
-                        <div><span style={{ color: "var(--muted)" }}>Booking ID:</span> #{detailCache[b.id].id}</div>
-                        <div><span style={{ color: "var(--muted)" }}>Apartment:</span> {detailCache[b.id].apartment}</div>
-                        <div><span style={{ color: "var(--muted)" }}>Flat/Villa:</span> {detailCache[b.id].flatNo}</div>
-                        <div><span style={{ color: "var(--muted)" }}>Address:</span> {detailCache[b.id].address}</div>
-                        <div><span style={{ color: "var(--muted)" }}>Mobile:</span> {detailCache[b.id].mobile}</div>
-                        <div><span style={{ color: "var(--muted)" }}>Pet:</span> {detailCache[b.id].pet_name || "—"}</div>
-                        <div><span style={{ color: "var(--muted)" }}>Status:</span> {detailCache[b.id].status}</div>
-                        <div><span style={{ color: "var(--muted)" }}>Payment:</span> {detailCache[b.id].payment_status || "—"}</div>
-                        <div><span style={{ color: "var(--muted)" }}>Walker:</span> {detailCache[b.id].assigned_walker || "Unassigned"}</div>
-                        <div><span style={{ color: "var(--muted)" }}>Amount:</span> {fmtAmount(detailCache[b.id].amount)}</div>
-                      </div>
-                    ) : (
-                      <p>Could not load details.</p>
-                    )}
+                {editPet && (
+                  <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
+                    <button type="button" className="btn-primary" onClick={savePet} style={{ minHeight: "44px", padding: "10px 24px", width: "auto" }}>Save Photo</button>
+                    <button type="button" className="btn btn-outline" onClick={cancelPet} style={{ height: "44px", width: "auto" }}>Cancel</button>
                   </div>
                 )}
               </div>
-            ))}
+            </div>
           </div>
-        </div>
-      </motion.div>
+        )}
 
-      {/* ===== SECTION 4: LOGOUT ===== */}
-      <motion.div className="auth-card" variants={pageTransition} initial="initial" animate="animate">
-        <div className="auth-body">
-          <h1 className="auth-title">Logout</h1>
-          <p className="auth-subtitle">Sign out of your account on this device.</p>
-          <button className="btn btn-outline" type="button" onClick={handleLogout} style={{ marginTop: 12 }}>
-            Logout
-          </button>
-        </div>
+        {view === "bookings" && (
+          <div className="auth-body" style={{ padding: "32px 32px 40px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "24px" }}>
+              <FaCalendarAlt style={{ color: "var(--z-primary)", fontSize: "1.2rem" }} />
+              <h2 style={{ fontSize: "1.4rem", fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>My Walking Bookings</h2>
+            </div>
+
+            {historyError && <div className="global-error">{historyError}</div>}
+
+            {bookings.length === 0 && !historyError && (
+              <div style={{ textAlign: "center", padding: "48px 16px", background: "#fcf9f6", borderRadius: "16px", border: "1px dashed rgba(0,0,0,0.06)" }}>
+                <p style={{ margin: 0, color: "var(--z-muted)", fontWeight: 600 }}>You don't have any bookings yet.</p>
+                <Link to="/booking-choice" className="btn-primary" style={{ marginTop: "16px", display: "inline-flex", width: "auto", minHeight: "40px", padding: "8px 20px" }}>
+                  Book a Walk
+                </Link>
+              </div>
+            )}
+
+            {bookings.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                {bookings.map((b) => {
+                  const isExpanded = expandedId === b.id;
+                  return (
+                    <div
+                      key={b.id}
+                      style={{
+                        background: "#ffffff",
+                        border: "1px solid rgba(0, 0, 0, 0.04)",
+                        borderRadius: "16px",
+                        boxShadow: "0 2px 8px rgba(0, 0, 0, 0.01)",
+                        overflow: "hidden",
+                        transition: "all 0.2s ease",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleDetail(b.id)}
+                        style={{
+                          width: "100%",
+                          textAlign: "left",
+                          background: isExpanded ? "rgba(255, 122, 24, 0.02)" : "#ffffff",
+                          border: "none",
+                          cursor: "pointer",
+                          padding: "16px 20px",
+                          fontFamily: "inherit",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: "12px",
+                        }}
+                      >
+                        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px 24px" }}>
+                          <div>
+                            <span style={{ fontSize: "0.75rem", color: "var(--z-muted)", fontWeight: 700, textTransform: "uppercase" }}>Date</span>
+                            <div style={{ fontWeight: 700, color: "var(--z-dark)", marginTop: "2px" }}>{fmtDate(b.created_at)}</div>
+                          </div>
+                          <div>
+                            <span style={{ fontSize: "0.75rem", color: "var(--z-muted)", fontWeight: 700, textTransform: "uppercase" }}>Status</span>
+                            <div style={{ marginTop: "2px" }}>
+                              <span
+                                style={{
+                                  display: "inline-block",
+                                  padding: "3px 8px",
+                                  borderRadius: "12px",
+                                  fontSize: "0.75rem",
+                                  fontWeight: 700,
+                                  background: b.status === "New" ? "#fff3e0" : b.status === "Assigned" ? "#e3f2fd" : b.status === "Completed" ? "#e8f5e9" : "#f5f5f5",
+                                  color: b.status === "New" ? "#e65100" : b.status === "Assigned" ? "#0d47a1" : b.status === "Completed" ? "#1b5e20" : "#616161",
+                                }}
+                              >
+                                {b.status}
+                              </span>
+                            </div>
+                          </div>
+                          <div>
+                            <span style={{ fontSize: "0.75rem", color: "var(--z-muted)", fontWeight: 700, textTransform: "uppercase" }}>Payment</span>
+                            <div style={{ marginTop: "2px" }}>
+                              <span
+                                style={{
+                                  display: "inline-block",
+                                  padding: "3px 8px",
+                                  borderRadius: "12px",
+                                  fontSize: "0.75rem",
+                                  fontWeight: 700,
+                                  background: b.payment_status === "paid" ? "#e8f5e9" : "#ffebee",
+                                  color: b.payment_status === "paid" ? "#2e7d32" : "#c62828",
+                                }}
+                              >
+                                {b.payment_status === "paid" ? "Paid" : "Pending"}
+                              </span>
+                            </div>
+                          </div>
+                          <div>
+                            <span style={{ fontSize: "0.75rem", color: "var(--z-muted)", fontWeight: 700, textTransform: "uppercase" }}>Walker</span>
+                            <div style={{ fontWeight: 600, color: "var(--z-dark)", marginTop: "2px" }}>{b.assigned_walker || "Unassigned"}</div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                          <span style={{ fontWeight: 800, fontSize: "1.1rem", color: "var(--z-dark)" }}>{fmtAmount(b.amount)}</span>
+                          <span style={{ color: "var(--z-muted)", transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s ease" }}>▼</span>
+                        </div>
+                      </button>
+
+                      {isExpanded && (
+                        <div style={{ padding: "20px", background: "#fcfbfb", borderTop: "1px solid rgba(0, 0, 0, 0.03)" }}>
+                          {detailLoading && !detailCache[b.id] ? (
+                            <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--z-muted)" }}>Loading details…</p>
+                          ) : detailCache[b.id] ? (
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", fontSize: "0.88rem" }}>
+                              <div>
+                                <div style={{ color: "var(--z-muted)", fontWeight: 600 }}>Booking Details</div>
+                                <div style={{ marginTop: "4px" }}><strong>ID:</strong> #{detailCache[b.id].id}</div>
+                                <div><strong>Pet Name:</strong> {detailCache[b.id].pet_name || "—"}</div>
+                                <div><strong>Owner Mobile:</strong> {detailCache[b.id].mobile}</div>
+                              </div>
+                              <div>
+                                <div style={{ color: "var(--z-muted)", fontWeight: 600 }}>Service Location</div>
+                                <div style={{ marginTop: "4px" }}><strong>Apartment:</strong> {detailCache[b.id].apartment}</div>
+                                <div><strong>Flat/Villa:</strong> {detailCache[b.id].flatNo}</div>
+                                <div><strong>Address:</strong> {detailCache[b.id].address}</div>
+                              </div>
+                              <div>
+                                <div style={{ color: "var(--z-muted)", fontWeight: 600 }}>Payment Summary</div>
+                                <div style={{ marginTop: "4px" }}><strong>Order ID:</strong> {detailCache[b.id].razorpay_order_id || "—"}</div>
+                                <div><strong>Payment ID:</strong> {detailCache[b.id].razorpay_payment_id || "—"}</div>
+                              </div>
+                            </div>
+                          ) : (
+                            <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--z-error)" }}>Could not load details.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </motion.div>
     </div>
   );

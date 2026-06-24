@@ -24,10 +24,13 @@ async function parseResponse(response) {
   return data;
 }
 
-export const getBookings = async () => {
-  const response = await fetch(`${API_URL}/bookings`, {
+export const getBookings = async (page = 1, limit = 10) => {
+  const response = await fetch(
+  `${API_URL}/bookings?page=${page}&limit=${limit}`,
+  {
     headers: authHeaders(),
-  });
+  }
+);
   return parseResponse(response);
 };
 

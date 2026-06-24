@@ -29,6 +29,7 @@ function App() {
   "/admin/login",
   "/admin/dashboard",
   "/profile",
+  "/my-bookings",
 ].includes(location.pathname);
 
 const isPolicyPage = location.pathname.startsWith("/policy/");
@@ -52,7 +53,15 @@ const isPolicyPage = location.pathname.startsWith("/policy/");
             path="/profile"
             element={
               <ProtectedRoute>
-                <Profile />
+                <Profile view="profile" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/my-bookings"
+            element={
+              <ProtectedRoute>
+                <Profile view="bookings" />
               </ProtectedRoute>
             }
           />

@@ -51,24 +51,28 @@ export default function StatsCards({ statsData, revenue }) {
     {
       label: "Total Bookings",
       value: total,
+      subValue: `Revenue: ${formatRevenue(statsData?.total_revenue, revenue?.currency)}`,
       icon: FiCalendar,
       iconClass: "admin-stat-card__icon--total",
     },
     {
       label: "New Bookings",
       value: newCount,
+      subValue: `Revenue: ${formatRevenue(statsData?.new_revenue, revenue?.currency)}`,
       icon: FiPlusCircle,
       iconClass: "admin-stat-card__icon--new",
     },
     {
       label: "Assigned Bookings",
       value: assignedCount,
+      subValue: `Revenue: ${formatRevenue(statsData?.assigned_revenue, revenue?.currency)}`,
       icon: FiUserCheck,
       iconClass: "admin-stat-card__icon--assigned",
     },
     {
       label: "Completed Bookings",
       value: completedCount,
+      subValue: `Revenue: ${formatRevenue(statsData?.completed_revenue, revenue?.currency)}`,
       icon: FiCheckCircle,
       iconClass: "admin-stat-card__icon--completed",
     },
@@ -87,7 +91,7 @@ export default function StatsCards({ statsData, revenue }) {
       initial="hidden"
       animate="visible"
     >
-      {stats.map(({ label, value, icon: Icon, iconClass }) => (
+      {stats.map(({ label, value, subValue, icon: Icon, iconClass }) => (
         <motion.div
           key={label}
           className="admin-stat-card"
@@ -101,6 +105,19 @@ export default function StatsCards({ statsData, revenue }) {
             </div>
           </div>
           <p className="admin-stat-card__value">{value}</p>
+          {subValue && (
+            <p
+              className="admin-stat-card__subvalue"
+              style={{
+                fontSize: "0.85rem",
+                opacity: 0.75,
+                marginTop: "6px",
+                fontWeight: "500",
+              }}
+            >
+              {subValue}
+            </p>
+          )}
         </motion.div>
       ))}
     </motion.div>

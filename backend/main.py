@@ -58,8 +58,7 @@ def _get_razorpay_client():
 
 
 def _paid_booking_filter():
-    return (Booking.payment_status == "paid") | (Booking.payment_status.is_(None))
-
+    return Booking.payment_status == "paid" 
 app = FastAPI(title="Paws Pal Connect API")
 
 @app.on_event("startup")
@@ -391,6 +390,7 @@ def _serialize_booking(booking: Booking, db: Session) -> dict:
         "status": booking.status,
         "assigned_walker": booking.assigned_walker,
         "created_at": booking.created_at,
+        "amount": booking.amount or _resolve_apartment_amount(booking.apartment),
     }
 
 
@@ -561,15 +561,34 @@ async def create_booking(
     }
 @app.get("/bookings")
 def get_bookings(
+    page: int = 1,
+    limit: int = 10,
     admin=Depends(get_current_admin),
-    db: Session = Depends(get_db)):
-    bookings = db.query(Booking).filter(
-        _paid_booking_filter()
-    ).order_by(
-        Booking.created_at.desc()
-    ).all()
-    return [_serialize_booking(b, db) for b in bookings]
+    db: Session = Depends(get_db),
+):
+    offset = (page - 1) * limit
 
+    query = db.query(Booking).filter(
+        _paid_booking_filter()
+    )
+
+    total = query.count()
+
+    bookings = (
+        query.order_by(Booking.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "total_pages": (total + limit - 1) // limit,
+        "bookings": [_serialize_booking(b, db) for b in bookings]
+    }
+    
 @app.get("/bookings/{booking_id}")
 def get_booking(
     booking_id: int,
@@ -1002,13 +1021,32 @@ def dashboard_stats(
 ):
     paid_bookings = db.query(Booking).filter(
         Booking.payment_status == "paid"
-    )
+    ).all()
+
+    total_bookings = len(paid_bookings)
+    total_revenue = sum(b.amount or _resolve_apartment_amount(b.apartment) for b in paid_bookings) / 100
+
+    new_bookings = [b for b in paid_bookings if b.status == "New"]
+    new_bookings_count = len(new_bookings)
+    new_bookings_revenue = sum(b.amount or _resolve_apartment_amount(b.apartment) for b in new_bookings) / 100
+
+    assigned_bookings = [b for b in paid_bookings if b.status == "Assigned"]
+    assigned_bookings_count = len(assigned_bookings)
+    assigned_bookings_revenue = sum(b.amount or _resolve_apartment_amount(b.apartment) for b in assigned_bookings) / 100
+
+    completed_bookings = [b for b in paid_bookings if b.status == "Completed"]
+    completed_bookings_count = len(completed_bookings)
+    completed_bookings_revenue = sum(b.amount or _resolve_apartment_amount(b.apartment) for b in completed_bookings) / 100
 
     return {
-        "total_bookings": paid_bookings.count(),
-        "new_bookings": paid_bookings.filter(Booking.status == "New").count(),
-        "assigned_bookings": paid_bookings.filter(Booking.status == "Assigned").count(),
-        "completed_bookings": paid_bookings.filter(Booking.status == "Completed").count(),
+        "total_bookings": total_bookings,
+        "total_revenue": total_revenue,
+        "new_bookings": new_bookings_count,
+        "new_revenue": new_bookings_revenue,
+        "assigned_bookings": assigned_bookings_count,
+        "assigned_revenue": assigned_bookings_revenue,
+        "completed_bookings": completed_bookings_count,
+        "completed_revenue": completed_bookings_revenue,
     }
        
 # ----- Booking history (current user only) -----

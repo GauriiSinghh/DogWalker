@@ -52,6 +52,9 @@ function BookingRow({ booking, isActive, onManage }) {
       <td className="admin-table__cell-muted" data-label="Walker">
         {booking.assigned_walker || "—"}
       </td>
+      <td className="admin-table__cell-muted" data-label="Amount Paid">
+        ₹{((booking.amount || 0) / 100).toLocaleString("en-IN")}
+      </td>
       <td data-label="Status">
         <StatusBadge status={booking.status} />
       </td>
@@ -96,6 +99,12 @@ function BookingCard({ booking, index, isActive, onManage }) {
           <span className="admin-booking-card__label">Walker</span>
           <span className="admin-booking-card__value">
             {booking.assigned_walker || "—"}
+          </span>
+        </div>
+        <div className="admin-booking-card__row">
+          <span className="admin-booking-card__label">Amount Paid</span>
+          <span className="admin-booking-card__value">
+            ₹{((booking.amount || 0) / 100).toLocaleString("en-IN")}
           </span>
         </div>
       </div>
@@ -185,6 +194,7 @@ export default function BookingTable({ bookings, onBookingUpdate }) {
                     <th scope="col">Apartment</th>
                     <th scope="col">Mobile</th>
                     <th scope="col">Walker</th>
+                    <th scope="col">Amount Paid</th>
                     <th scope="col">Status</th>
                     <th scope="col" className="admin-table__th-actions">Actions</th>
                   </tr>
