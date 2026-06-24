@@ -1,9 +1,11 @@
+// src/components/home/Navbar.jsx
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 
 import logo from "../../assets/images/logo.png";
 import { useAuth } from "../../hooks/useAuth.js";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import ProfileDropdown from "../ProfileDropdown.jsx";
 
 const NAV_ITEMS = [
   { id: "home", label: "Home" },
@@ -15,10 +17,10 @@ const NAV_ITEMS = [
 ];
 
 function Navbar({ onNav, onBook }) {
-  
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -38,11 +40,12 @@ function Navbar({ onNav, onBook }) {
     setOpen(false);
     onNav(id);
   };
+
   const location = useLocation();
 
-if (location.pathname.startsWith("/policy/")) {
-  return null;
-}
+  if (location.pathname.startsWith("/policy/")) {
+    return null;
+  }
 
   return (
     <motion.header
@@ -94,6 +97,30 @@ if (location.pathname.startsWith("/policy/")) {
                   type="button"
                   className="btn btn-outline btn-nav-cta"
                   onClick={() => {
+                    setOpen(false);
+                    navigate("/profile");
+                  }}
+                >
+                  Edit Profile
+                </button>
+              )}
+              {user && (
+                <button
+                  type="button"
+                  className="btn btn-outline btn-nav-cta"
+                  onClick={() => {
+                    setOpen(false);
+                    navigate("/profile", { state: { focus: "bookings" } });
+                  }}
+                >
+                  My Bookings
+                </button>
+              )}
+              {user && (
+                <button
+                  type="button"
+                  className="btn btn-outline btn-nav-cta"
+                  onClick={() => {
                     logout();
                     setOpen(false);
                   }}
@@ -114,14 +141,12 @@ if (location.pathname.startsWith("/policy/")) {
               Book a Walk
             </button>
 
+            {/* Desktop: single profile dropdown replaces the separate
+                Profile + Logout buttons */}
             {user && (
-              <button
-                type="button"
-                className="btn btn-outline btn-nav-cta nav-actions-desktop"
-                onClick={logout}
-              >
-                Logout
-              </button>
+              <div className="nav-actions-desktop">
+                <ProfileDropdown />
+              </div>
             )}
 
             <button

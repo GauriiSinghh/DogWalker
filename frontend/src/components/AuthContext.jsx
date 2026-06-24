@@ -1,4 +1,5 @@
-import { createContext, useState, useEffect } from "react";
+// src/components/AuthContext.jsx
+import { createContext, useState, useEffect, useCallback } from "react";
 
 export const AuthContext = createContext(null);
 
@@ -41,6 +42,21 @@ export function AuthProvider({ children }) {
     setUser(userData);
   };
 
+  // Single source of truth updater — merges partial profile changes into the
+  // current user and keeps localStorage in sync, so the Booking form and the
+  // rest of the app immediately reflect edits made on the Profile page.
+  const updateUser = useCallback((patch) => {
+    setUser((prev) => {
+      const next = { ...(prev || {}), ...patch };
+      try {
+        localStorage.setItem("user", JSON.stringify(next));
+      } catch {
+        // ignore storage write errors
+      }
+      return next;
+    });
+  }, []);
+
   const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -48,7 +64,9 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider
+      value={{ user, loading, login, logout, updateUser, setUser }}
+    >
       {children}
     </AuthContext.Provider>
   );

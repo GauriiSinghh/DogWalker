@@ -14,6 +14,7 @@ import TermsConditions from "./pages/TermsConditions.jsx";
 import RefundCancellationPolicy from "./pages/RefundCancellationPolicy.jsx";
 import AdminDashboard from "./pages/AdminDashboard.jsx"
 import AdminProtectedRoute from "./components/AdminProtectedRoute.jsx";
+import Profile from "./pages/Profile.jsx";
 
 function App() {
   const location = useLocation();
@@ -27,6 +28,7 @@ function App() {
   "/booking-choice",
   "/admin/login",
   "/admin/dashboard",
+  "/profile",
 ].includes(location.pathname);
 
 const isPolicyPage = location.pathname.startsWith("/policy/");
@@ -46,6 +48,14 @@ const isPolicyPage = location.pathname.startsWith("/policy/");
           <Route path="/signup" element={<Signup />} />
           <Route path="/admin/login" element={<Navigate to="/login" replace />} />
           <Route path="/admin-login" element={<Navigate to="/login" replace />} />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/admin/dashboard"
             element={

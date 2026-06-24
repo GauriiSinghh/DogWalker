@@ -1196,3 +1196,10 @@ section {
     font-size: 0.85rem;
   }
 }
+/* ===== ADD to App.css (new class only — no existing selectors touched) ===== */
+.price-display {
+  margin-top: 8px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--primary);
+}

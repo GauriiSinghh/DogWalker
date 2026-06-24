@@ -51,6 +51,10 @@ class Booking(Base):
     pet_image = Column(Text, nullable=True)
     status = Column(String, default="New")
     assigned_walker = Column(String, nullable=True)
+    payment_status = Column(String, default="pending")
+    razorpay_order_id = Column(String, nullable=True)
+    razorpay_payment_id = Column(String, nullable=True)
+    amount = Column(Integer, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 class Admin(Base):

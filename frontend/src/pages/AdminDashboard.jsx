@@ -10,6 +10,8 @@ import CustomersPanel from "../components/CustomersPanel";
 import ThemeToggle from "../components/ThemeToggle";
 import { useAdminTheme } from "../hooks/useAdminTheme";
 import "../styles/admin.css";
+import { getTotalRevenue } from "../services/dashboardApi";
+import RevenueChart from "../components/RevenueChart";
 
 
 const PLACEHOLDER_CONTENT = {
@@ -69,10 +71,12 @@ function PlaceholderPanel({ section }) {
 export default function AdminDashboard() {
   const { theme, toggleTheme } = useAdminTheme();
   const [bookings, setBookings] = useState([]);
+  const [revenue, setRevenue] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSection, setActiveSection] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
 
   const fetchBookings = () => {
     getBookings()
@@ -83,10 +87,20 @@ export default function AdminDashboard() {
         console.error(err);
       });
   };
-
+  const fetchRevenue = () => {
+    getTotalRevenue()
+      .then((data) => {
+        setRevenue(data);
+      })
+      .catch((err) => {
+        console.error(err);
+      });
+    };
   useEffect(() => {
     fetchBookings();
+    fetchRevenue();
   }, []);
+
   useEffect(() => {
   const WS_URL =
   window.location.hostname === "localhost"
@@ -145,8 +159,9 @@ const ws = new WebSocket(WS_URL);
     );
   }, [bookings, searchQuery]);
 
-  const showStats = activeSection === "dashboard" || activeSection === "bookings";
-  const showTable = activeSection === "dashboard" || activeSection === "bookings";
+  const showStats = activeSection === "dashboard";
+  const showTable = activeSection === "bookings";
+  const showChart = activeSection === "dashboard";
   const showWalkers = activeSection === "walkers";
   const showCustomers = activeSection === "customers";
   const showPlaceholder = activeSection === "settings";
@@ -189,6 +204,7 @@ const ws = new WebSocket(WS_URL);
       />
 
       <div className="admin-main">
+        {activeSection !== "dashboard" && activeSection !== "settings" &&(
         <motion.header
           className="admin-header"
           initial={{ opacity: 0, y: -10 }}
@@ -211,12 +227,13 @@ const ws = new WebSocket(WS_URL);
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <ThemeToggle theme={theme} onToggle={toggleTheme} />
+            {/* <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <div className="admin-header__avatar" title="Admin">
               A
-            </div>
+            </div> */}
           </div>
         </motion.header>
+        )}
 
         <main className="admin-content">
           <div className="admin-section-header">
@@ -232,7 +249,8 @@ const ws = new WebSocket(WS_URL);
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.25 }}
             >
-              {showStats && <StatsCards bookings={bookings} />}
+              {showStats && <StatsCards bookings={bookings} revenue={revenue}  />}
+ {showChart && <RevenueChart days={30} />}
 
               {showTable && (
                 <BookingTable
@@ -253,3 +271,4 @@ const ws = new WebSocket(WS_URL);
     </div>
   );
 }
+

@@ -27,6 +27,19 @@ with engine.connect() as conn:
     """))
 
     conn.execute(text("""
+        ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50);
+    """))
+    conn.execute(text("""
+        ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS razorpay_order_id VARCHAR(255);
+    """))
+    conn.execute(text("""
+        ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS razorpay_payment_id VARCHAR(255);
+    """))
+
+    conn.execute(text("""
         ALTER TABLE users
         ADD COLUMN IF NOT EXISTS pet_name VARCHAR(255);
     """))

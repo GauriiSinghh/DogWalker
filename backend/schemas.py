@@ -113,3 +113,81 @@ class PageResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class CreateOrderRequest(BaseModel):
+    booking_id: int
+
+
+class CreateOrderResponse(BaseModel):
+    order_id: str
+    amount: int
+    currency: str
+
+
+class VerifyPaymentRequest(BaseModel):
+    booking_id: int
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
+class VerifyPaymentResponse(BaseModel):
+    success: bool
+    message: str
+    booking_id: Optional[int] = None
+
+# ===== ADD TO schemas.py (at the end, additive only) =====
+
+class ProfileResponse(BaseModel):
+    id: int
+    name: str
+    email: str
+    mobile: str
+    apartment: str
+    flatNo: str
+    address: str
+    pet_name: Optional[str] = None
+    pet_image: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    mobile: Optional[str] = None
+    apartment: Optional[str] = None
+    flatNo: Optional[str] = None
+    address: Optional[str] = None
+    pet_name: Optional[str] = None
+    pet_image: Optional[str] = None
+
+
+class BookingHistoryItem(BaseModel):
+    id: int
+    created_at: Optional[datetime] = None
+    status: str
+    payment_status: Optional[str] = None
+    assigned_walker: Optional[str] = None
+    amount: Optional[int] = None
+    apartment: str
+
+    class Config:
+        from_attributes = True
+
+
+class BookingHistoryDetail(BookingHistoryItem):
+    name: str
+    email: str
+    mobile: str
+    flatNo: str
+    address: str
+    pet_name: Optional[str] = None
+    pet_image: Optional[str] = None
+
+
+class ApartmentPriceResponse(BaseModel):
+    amount: int
+    apartment: str

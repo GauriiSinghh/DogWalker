@@ -1,11 +1,12 @@
 import os
 import asyncio
 import logging
+import razorpay
 from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from fastapi.staticfiles import StaticFiles
 from db import engine, SessionLocal, get_db, Base
 from models import User, Pet, Walker, Booking, Page, Admin
@@ -13,16 +14,53 @@ from schemas import (
     UserCreate, UserLogin, UserResponse, BookingRequest, BookingResponse, BookingUpdate,
     PageResponse, AdminLogin, WalkerResponse, WalkerCreate, WalkerDetailResponse,
     CustomerSummary, CustomerDetailResponse, CustomerBookingSummary,
+    CreateOrderRequest, CreateOrderResponse, VerifyPaymentRequest, VerifyPaymentResponse,
+    ProfileResponse, ProfileUpdate, BookingHistoryItem, BookingHistoryDetail,  # ADDED
+    ApartmentPriceResponse,  # ADDED
 )
 from auth import hash_password, verify_password, create_access_token, get_current_user, get_current_admin
 from email_service import send_booking_email, send_user_confirmation_email
 from websocket_manager import manager
 from sqlalchemy.exc import OperationalError
+from pydantic import BaseModel
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Paws Pal Connect API")
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
+BOOKING_AMOUNT_PAISE = int(os.getenv("BOOKING_AMOUNT_PAISE", "19900"))
+# ===== ADD near the top of main.py, after BOOKING_AMOUNT_PAISE definition =====
 
+# Apartment-based pricing (paise). Must match frontend APARTMENT_PRICES exactly.
+APARTMENT_PRICES = {
+    "Sobha Dream Acres Apartment": 19900,
+    "Prestige Shantiniketan": 24900,
+    "Purva Fountain Square": 22900,
+    "DLF Jigani": 17900,
+}
+
+
+def _resolve_apartment_amount(apartment: str | None) -> int:
+    """Return validated server-side amount for an apartment, else default."""
+    if apartment and apartment in APARTMENT_PRICES:
+        return APARTMENT_PRICES[apartment]
+    return BOOKING_AMOUNT_PAISE
+
+
+def _get_razorpay_client():
+    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Payment service is not configured",
+        )
+    return razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+
+
+def _paid_booking_filter():
+    return (Booking.payment_status == "paid") | (Booking.payment_status.is_(None))
+
+app = FastAPI(title="Paws Pal Connect API")
 
 @app.on_event("startup")
 def init_database_tables():
@@ -357,7 +395,12 @@ def _serialize_booking(booking: Booking, db: Session) -> dict:
 
 
 def _build_customer_summaries(db: Session) -> list[CustomerSummary]:
-    bookings = db.query(Booking).order_by(Booking.created_at.desc()).all()
+    bookings = (
+        db.query(Booking)
+        .filter(_paid_booking_filter())
+        .order_by(Booking.created_at.desc())
+        .all()
+    )
     grouped: dict[str, dict] = {}
 
     for booking in bookings:
@@ -423,7 +466,7 @@ def get_customer_detail(
 
     customer_bookings = (
         db.query(Booking)
-        .filter(Booking.email.ilike(email))
+        .filter(Booking.email.ilike(email), _paid_booking_filter())
         .order_by(Booking.created_at.desc())
         .all()
     )
@@ -443,14 +486,42 @@ def get_customer_detail(
     )
 
 
+async def _notify_booking_confirmed(
+    booking: Booking,
+    background_tasks: BackgroundTasks,
+):
+    await manager.broadcast({
+        "type": "new_booking",
+        "booking_id": booking.id,
+        "name": booking.name,
+        "apartment": booking.apartment,
+        "status": "New",
+    })
+    background_tasks.add_task(
+        send_booking_email,
+        apartment=booking.apartment,
+        name=booking.name,
+        mobile=booking.mobile,
+        flatNo=booking.flatNo,
+        address=booking.address,
+    )
+    background_tasks.add_task(
+        send_user_confirmation_email,
+        user_name=booking.name,
+        user_email=booking.email,
+        apartment=booking.apartment,
+        flatNo=booking.flatNo,
+        address=booking.address,
+    )
+
+
 @app.post("/book")
 async def create_booking(
     booking_data: BookingRequest,
-    background_tasks: BackgroundTasks,
     user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create a booking and send emails to admin and user"""
+    """Create a pending booking; confirmation happens after payment verification."""
     print(f"Booking request from user {user_id}")
     print(f"Booking data: {booking_data}")
     
@@ -472,39 +543,13 @@ async def create_booking(
         pet_image=pet_image,
         status="New",
         assigned_walker=None,
+        payment_status="pending",
+        amount=_resolve_apartment_amount(booking_data.apartment),
     )
     db.add(new_booking)
     db.commit()
     db.refresh(new_booking)
 
-    await manager.broadcast({
-        "type": "new_booking",
-        "booking_id": new_booking.id,
-        "name": new_booking.name,
-        "apartment": new_booking.apartment,
-        "status": "New"
-    })
-
-    
-    # Send emails in background (non-blocking)
-    background_tasks.add_task(
-        send_booking_email,
-        apartment=booking_data.apartment,
-        name=booking_data.name,
-        mobile=booking_data.mobile,
-        flatNo=booking_data.flatNo,
-        address=booking_data.address,
-    )
-    
-    background_tasks.add_task(
-        send_user_confirmation_email,
-        user_name=booking_data.name,
-        user_email=user_email,
-        apartment=booking_data.apartment,
-        flatNo=booking_data.flatNo,
-        address=booking_data.address,
-    )
-    
     print(f"Booking {new_booking.id} created")
     
     return {
@@ -518,7 +563,9 @@ async def create_booking(
 def get_bookings(
     admin=Depends(get_current_admin),
     db: Session = Depends(get_db)):
-    bookings = db.query(Booking).order_by(
+    bookings = db.query(Booking).filter(
+        _paid_booking_filter()
+    ).order_by(
         Booking.created_at.desc()
     ).all()
     return [_serialize_booking(b, db) for b in bookings]
@@ -539,6 +586,12 @@ def get_booking(
             detail="Booking not found"
         )
 
+    if booking.payment_status not in ("paid", None):
+        raise HTTPException(
+            status_code=404,
+            detail="Booking not found"
+        )
+
     return _serialize_booking(booking, db)
 
 @app.patch("/bookings/{booking_id}")
@@ -553,6 +606,12 @@ async def update_booking(
     ).first()
 
     if not booking:
+        raise HTTPException(
+            status_code=404,
+            detail="Booking not found"
+        )
+
+    if booking.payment_status not in ("paid", None):
         raise HTTPException(
             status_code=404,
             detail="Booking not found"
@@ -610,6 +669,98 @@ async def update_booking(
 
     return _serialize_booking(booking, db)
 
+
+# ===== RAZORPAY PAYMENT ENDPOINTS =====
+
+@app.post("/create-order", response_model=CreateOrderResponse)
+def create_order(
+    body: CreateOrderRequest,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    booking = db.query(Booking).filter(Booking.id == body.booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.user_id != int(user_id):
+        raise HTTPException(status_code=403, detail="Not authorized for this booking")
+    if booking.payment_status == "paid":
+        raise HTTPException(status_code=400, detail="Booking is already paid")
+
+    # ===== MODIFY create_order — change the amount source ONLY =====
+    client = _get_razorpay_client()
+    order_amount = getattr(booking, "amount", None) or _resolve_apartment_amount(booking.apartment)
+    try:
+        order = client.order.create({
+            "amount": order_amount,          # was BOOKING_AMOUNT_PAISE
+            "currency": "INR",
+            "receipt": f"booking_{booking.id}",
+            "notes": {"booking_id": str(booking.id)},
+        })
+    except Exception:
+        logger.exception("Razorpay order creation failed for booking %s", booking.id)
+        raise HTTPException(
+            status_code=502,
+            detail="Could not create payment order. Please try again.",
+        )
+
+    booking.razorpay_order_id = order["id"]
+    db.commit()
+
+    return CreateOrderResponse(
+        order_id=order["id"],
+        amount=order["amount"],
+        currency=order["currency"],
+    )
+
+
+@app.post("/verify-payment", response_model=VerifyPaymentResponse)
+async def verify_payment(
+    body: VerifyPaymentRequest,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    booking = db.query(Booking).filter(Booking.id == body.booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.user_id != int(user_id):
+        raise HTTPException(status_code=403, detail="Not authorized for this booking")
+    if booking.payment_status == "paid":
+        return VerifyPaymentResponse(
+            success=True,
+            message="Payment already verified",
+            booking_id=booking.id,
+        )
+    if booking.razorpay_order_id != body.razorpay_order_id:
+        raise HTTPException(status_code=400, detail="Order ID does not match booking")
+
+    client = _get_razorpay_client()
+    try:
+        client.utility.verify_payment_signature({
+            "razorpay_order_id": body.razorpay_order_id,
+            "razorpay_payment_id": body.razorpay_payment_id,
+            "razorpay_signature": body.razorpay_signature,
+        })
+    except razorpay.errors.SignatureVerificationError:
+        return VerifyPaymentResponse(success=False, message="Payment verification failed")
+    except Exception:
+        logger.exception("Payment verification error for booking %s", booking.id)
+        raise HTTPException(status_code=502, detail="Could not verify payment")
+
+    booking.payment_status = "paid"
+    booking.razorpay_payment_id = body.razorpay_payment_id
+    db.commit()
+    db.refresh(booking)
+
+    await _notify_booking_confirmed(booking, background_tasks)
+
+    return VerifyPaymentResponse(
+        success=True,
+        message="Payment verified successfully",
+        booking_id=booking.id,
+    )
+
+
 @app.websocket("/ws/bookings")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
@@ -628,6 +779,289 @@ def get_page(slug: str):
     }
 
 
+# ===== ADD new endpoints (additive — no existing endpoint touched) =====
+
+# ----- Apartment pricing -----
+@app.get("/apartment-price", response_model=ApartmentPriceResponse)
+def get_apartment_price(
+    apartment: str,
+    user_id: str = Depends(get_current_user),
+):
+    if apartment not in APARTMENT_PRICES:
+        raise HTTPException(status_code=404, detail="Unknown apartment")
+    return ApartmentPriceResponse(
+        amount=APARTMENT_PRICES[apartment],
+        apartment=apartment,
+    )
+
+
+# ----- Profile -----
+@app.get("/profile", response_model=ProfileResponse)
+def get_profile(
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Prefer Pet table values if present, fall back to User fields
+    pet = db.query(Pet).filter(Pet.user_id == user.id).order_by(Pet.id.desc()).first()
+    pet_name = pet.name if pet and pet.name else user.pet_name
+    pet_image = pet.image_url if pet and pet.image_url else user.pet_image
+
+    return ProfileResponse(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        mobile=user.mobile,
+        apartment=user.apartment,
+        flatNo=user.flatNo,
+        address=user.address,
+        pet_name=pet_name,
+        pet_image=pet_image,
+    )
+
+
+@app.patch("/profile", response_model=ProfileResponse)
+def update_profile(
+    update: ProfileUpdate,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    data = update.model_dump(exclude_unset=True)
+
+    # Email uniqueness check if changed
+    new_email = data.get("email")
+    if new_email and new_email != user.email:
+        clash = db.query(User).filter(User.email == new_email, User.id != user.id).first()
+        if clash:
+            raise HTTPException(status_code=400, detail="Email already registered")
+
+    # Update plain user fields
+    for field in ("name", "email", "mobile", "apartment", "flatNo", "address"):
+        if field in data and data[field] is not None:
+            setattr(user, field, data[field])
+
+    # Sync pet fields across User + Pet tables
+    pet_name = data.get("pet_name")
+    pet_image = data.get("pet_image")
+    if pet_name is not None or pet_image is not None:
+        if pet_name is not None:
+            user.pet_name = pet_name
+        if pet_image is not None:
+            user.pet_image = pet_image
+
+        pet = db.query(Pet).filter(Pet.user_id == user.id).order_by(Pet.id.desc()).first()
+        if not pet:
+            pet = Pet(user_id=user.id, name=user.pet_name, image_url=user.pet_image)
+            db.add(pet)
+        else:
+            if pet_name is not None:
+                pet.name = pet_name
+            if pet_image is not None:
+                pet.image_url = pet_image
+
+    try:
+        db.commit()
+        db.refresh(user)
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Profile update failed for user %s", user_id)
+        raise HTTPException(status_code=500, detail="Could not update profile")
+
+    pet = db.query(Pet).filter(Pet.user_id == user.id).order_by(Pet.id.desc()).first()
+    return ProfileResponse(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        mobile=user.mobile,
+        apartment=user.apartment,
+        flatNo=user.flatNo,
+        address=user.address,
+        pet_name=(pet.name if pet and pet.name else user.pet_name),
+        pet_image=(pet.image_url if pet and pet.image_url else user.pet_image),
+    )
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    mobile: Optional[str] = None
+    apartment: Optional[str] = None
+    flatNo: Optional[str] = None
+    address: Optional[str] = None
+
+
+@app.put("/api/users/{user_id}")
+def update_user(
+    user_id: int,
+    payload: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user_id: str = Depends(get_current_user),
+):
+    if str(current_user_id) != str(user_id):
+        raise HTTPException(
+            status_code=403,
+            detail="You can only update your own profile"
+        )
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    data = payload.dict(exclude_unset=True)
+
+    for field, value in data.items():
+        setattr(user, field, value)
+
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "mobile": user.mobile,
+        "apartment": user.apartment,
+        "flatNo": user.flatNo,
+        "address": user.address,
+    }
+
+    # ===== DASHBOARD REVENUE APIs =====
+
+@app.get("/api/dashboard/revenue")
+def dashboard_revenue(
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    bookings = db.query(Booking).filter(
+        Booking.payment_status == "paid"
+    ).all()
+
+    total = 0
+
+    for booking in bookings:
+        if getattr(booking, "amount", None):
+            total += booking.amount
+
+    return {
+        "total_revenue": round(total / 100, 2),
+        "currency": "INR"
+    }
+
+
+@app.get("/api/dashboard/revenue-daily")
+def dashboard_revenue_daily(
+    days: int = 30,
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    today = date.today()
+
+    revenue_map = {}
+
+    for i in range(days):
+        d = today - timedelta(days=i)
+        revenue_map[d.isoformat()] = 0
+
+    bookings = db.query(Booking).filter(
+        Booking.payment_status == "paid"
+    ).all()
+
+    for booking in bookings:
+        if not booking.created_at:
+            continue
+
+        day = booking.created_at.date().isoformat()
+
+        if day in revenue_map:
+            revenue_map[day] += (
+                getattr(booking, "amount", 0) or 0
+            ) / 100
+
+    return [
+        {
+            "date": day,
+            "revenue": revenue_map[day]
+        }
+        for day in sorted(revenue_map.keys())
+    ]
+
+    
+# ----- Booking history (current user only) -----
+def _booking_amount(booking: Booking) -> int:
+    if getattr(booking, "amount", None):
+        return booking.amount
+    return _resolve_apartment_amount(booking.apartment)
+
+
+@app.get("/booking-history", response_model=list[BookingHistoryItem])
+def get_booking_history(
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    bookings = (
+        db.query(Booking)
+        .filter(Booking.user_id == int(user_id))
+        .order_by(Booking.created_at.desc())
+        .all()
+    )
+    return [
+        BookingHistoryItem(
+            id=b.id,
+            created_at=b.created_at,
+            status=b.status,
+            payment_status=b.payment_status,
+            assigned_walker=b.assigned_walker,
+            amount=_booking_amount(b),
+            apartment=b.apartment,
+        )
+        for b in bookings
+    ]
+
+
+@app.get("/booking-history/{booking_id}", response_model=BookingHistoryDetail)
+def get_booking_history_detail(
+    booking_id: int,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.user_id != int(user_id):
+        raise HTTPException(status_code=403, detail="Not authorized for this booking")
+
+    return BookingHistoryDetail(
+        id=booking.id,
+        created_at=booking.created_at,
+        status=booking.status,
+        payment_status=booking.payment_status,
+        assigned_walker=booking.assigned_walker,
+        amount=_booking_amount(booking),
+        apartment=booking.apartment,
+        name=booking.name,
+        email=booking.email,
+        mobile=booking.mobile,
+        flatNo=booking.flatNo,
+        address=booking.address,
+        pet_name=booking.pet_name,
+        pet_image=booking.pet_image,
+    )
+
+
+# ----- Logout (stateless) -----
+@app.post("/logout")
+def logout_endpoint(user_id: str = Depends(get_current_user)):
+    return {"message": "logged out"}
 
 if __name__ == "__main__":
     import uvicorn

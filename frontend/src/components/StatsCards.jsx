@@ -1,5 +1,12 @@
+// src/components/StatsCards.jsx
 import { motion } from "framer-motion";
-import { FiCalendar, FiPlusCircle, FiUserCheck, FiCheckCircle } from "react-icons/fi";
+import {
+  FiCalendar,
+  FiPlusCircle,
+  FiUserCheck,
+  FiCheckCircle,
+  FiDollarSign,
+} from "react-icons/fi";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -18,7 +25,23 @@ const cardVariants = {
   },
 };
 
-export default function StatsCards({ bookings }) {
+const CURRENCY_SYMBOLS = {
+  INR: "₹",
+  USD: "$",
+  EUR: "€",
+  GBP: "£",
+};
+
+function formatRevenue(amount, currency = "INR") {
+  const symbol = CURRENCY_SYMBOLS[currency] || "";
+  const value = Number(amount || 0);
+  // amount is assumed to be in paise/cents from backend; backend sends major units here.
+  return `${symbol}${value.toLocaleString("en-IN", {
+    maximumFractionDigits: 0,
+  })}`;
+}
+
+export default function StatsCards({ bookings, revenue }) {
   const total = bookings.length;
   const newCount = bookings.filter((b) => b.status === "New").length;
   const assignedCount = bookings.filter((b) => b.status === "Assigned").length;
@@ -48,6 +71,12 @@ export default function StatsCards({ bookings }) {
       value: completedCount,
       icon: FiCheckCircle,
       iconClass: "admin-stat-card__icon--completed",
+    },
+    {
+      label: "Total Revenue",
+      value: formatRevenue(revenue?.total_revenue, revenue?.currency),
+      icon: FiDollarSign,
+      iconClass: "admin-stat-card__icon--revenue",
     },
   ];
 

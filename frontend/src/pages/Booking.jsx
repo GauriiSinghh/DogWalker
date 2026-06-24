@@ -1,9 +1,11 @@
+// src/pages/Booking.jsx
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { FaTimes } from "react-icons/fa";
 import { useAuth } from "../hooks/useAuth.js";
 import { API_BASE } from "../config/api.js";
+import { payForBooking } from "../services/razorpay.js";
 import SuccessModal from "../components/SuccessModal.jsx";
 import logo from "../assets/images/logo.png";
 import "../styles/modal-base.css";
@@ -15,14 +17,21 @@ const pageTransition = {
   exit: { opacity: 0, y: -15 },
   transition: { duration: 0.3, ease: [0.4, 0, 0.2, 1] }
 };
+const APARTMENT_PRICES = {
+  "Sobha Dream Acres Apartment": 19900,
+  "Prestige Shantiniketan": 24900,
+  "Purva Fountain Square": 22900,
+  "DLF Jigani": 17900,
+};
 
 function Booking() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const location = useLocation();
   const prefillSelf = location.state?.mode === "self";
   const bookForOther = location.state?.mode === "other";
 
+  // Prefill from the LIVE user context (single source of truth).
   const [apartment, setApartment] = useState(prefillSelf ? user?.apartment || "" : "");
   const [name, setName] = useState(prefillSelf ? user?.name || "" : "");
   const [mobile, setMobile] = useState(prefillSelf ? user?.mobile || "" : "");
@@ -39,10 +48,70 @@ function Booking() {
   const [loading, setLoading] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
   const [confirmed, setConfirmed] = useState(null);
+  const [bookingAmount, setBookingAmount] = useState(
+    prefillSelf && user?.apartment ? APARTMENT_PRICES[user.apartment] ?? null : null
+  );
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
+
+  // Keep "Book for myself" fields in sync with the live context if it changes
+  // (e.g. user edited their profile right before navigating here).
+  useEffect(() => {
+    if (!prefillSelf || !user) return;
+    setApartment(user.apartment || "");
+    setName(user.name || "");
+    setMobile(user.mobile || "");
+    setFlatNo(user.flatNo || "");
+    setAddress(user.address || "");
+    setBookingAmount(
+      user.apartment ? APARTMENT_PRICES[user.apartment] ?? null : null
+    );
+  }, [prefillSelf, user]);
+
+  useEffect(() => {
+    async function loadProfile() {
+      if (!prefillSelf) return;
+
+      try {
+        const token = localStorage.getItem("token");
+
+        const res = await fetch(`${API_BASE}/profile`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+
+          setApartment(data.apartment || "");
+          setName(data.name || "");
+          setMobile(data.mobile || "");
+          setFlatNo(data.flatNo || "");
+          setAddress(data.address || "");
+          setBookingAmount(
+            data.apartment ? APARTMENT_PRICES[data.apartment] ?? null : null
+          );
+
+          // Sync global context so other screens stay consistent.
+          updateUser({
+            name: data.name || "",
+            email: data.email || user?.email || "",
+            mobile: data.mobile || "",
+            apartment: data.apartment || "",
+            flatNo: data.flatNo || "",
+            address: data.address || "",
+          });
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    loadProfile();
+  }, [prefillSelf]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function validateForm() {
     setError("");
@@ -95,6 +164,29 @@ function Booking() {
     reader.readAsDataURL(file);
   }
 
+  async function handleApartmentChange(value) {
+    setApartment(value);
+    if (!value) {
+      setBookingAmount(null);
+      return;
+    }
+    // optimistic from local map
+    setBookingAmount(APARTMENT_PRICES[value] ?? null);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(
+        `${API_BASE}/apartment-price?apartment=${encodeURIComponent(value)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setBookingAmount(data.amount);
+      }
+    } catch {
+      // keep optimistic value
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (!validateForm()) {
@@ -126,6 +218,20 @@ function Booking() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Booking failed");
 
+      // If this was a self-booking, keep global context aligned with submitted data.
+      if (prefillSelf) {
+        updateUser({ apartment, name, mobile, flatNo, address });
+      }
+
+      await payForBooking({
+        bookingId: data.id,
+        token,
+        user,
+        name,
+        email: data.email || user?.email,
+        mobile,
+      });
+
       const currentDate = new Date().toLocaleDateString("en-IN", {
         day: "2-digit", month: "short", year: "numeric",
       });
@@ -150,7 +256,7 @@ function Booking() {
       setApartment(""); setName(""); setMobile(""); setFlatNo(""); setAddress("");
       setPetName(""); setPetImage(""); setPetImagePreview("");
     } catch (err) {
-      setError("Could not submit booking. Please try again.");
+      setError(err.message || "Could not complete booking. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -190,7 +296,7 @@ function Booking() {
                   id="apartment"
                   className={`form-select ${showErrors && !apartment ? "invalid" : ""}`}
                   value={apartment}
-                  onChange={(e) => setApartment(e.target.value)}
+                  onChange={(e) => handleApartmentChange(e.target.value)}
                 >
                   <option value="">-- Choose Apartment --</option>
                   <option value="Sobha Dream Acres Apartment">Sobha Dream Acres Apartment</option>
@@ -199,6 +305,9 @@ function Booking() {
                   <option value="DLF Jigani">DLF Jigani</option>
                 </select>
                 {showErrors && !apartment && <div className="field-error-msg">Please select an apartment</div>}
+                {bookingAmount != null && (
+                  <p className="price-display">Booking Amount: ₹{(bookingAmount / 100).toFixed(0)}</p>
+                )}
               </div>
 
               <div className="form-row">
@@ -302,7 +411,7 @@ function Booking() {
 
               <div className="sticky-footer">
                 <button type="submit" className="btn-primary" disabled={loading}>
-                  {loading ? "Booking..." : "🐾 Book a Walker"}
+                  {loading ? "Processing..." : "🐾 Book a Walker"}
                 </button>
               </div>
             </form>

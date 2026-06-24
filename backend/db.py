@@ -18,9 +18,11 @@ def _normalize_database_url(url: str) -> str:
 DATABASE_URL = _normalize_database_url(
     os.getenv(
         "DATABASE_URL",
-        "postgresql://postgres:171216@localhost:5432/dogwalking_db",
+        "postgresql://postgres:gauri2442@localhost:5432/dogwalking_db",
+
     )
 )
+print("databse url=", DATABASE_URL)
 
 engine = create_engine(
     DATABASE_URL,

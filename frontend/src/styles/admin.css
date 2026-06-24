@@ -392,7 +392,7 @@
 }
 
 .admin-section-title {
-  font-size: 20px;
+  font-size: 2rem;
   font-weight: 800;
   color: var(--admin-text);
   margin: 0 0 6px;
@@ -400,7 +400,7 @@
 }
 
 .admin-section-subtitle {
-  font-size: 13px;
+  font-size: 1rem;
   color: var(--admin-text-muted);
   margin: 0;
   font-weight: 500;
@@ -2236,12 +2236,12 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #64748b;
+  color: #f8fafc;
   margin: 0 0 8px;
 }
 
 .admin-manage--light .admin-manage__panel-title {
-  color: #475569;
+  color: #0f172a;
 }
 
 .admin-manage__details-card {
@@ -2296,6 +2296,15 @@
   margin: 0;
   text-align: right;
   word-break: break-word;
+}
+.admin-manage__assign-btn {
+  width: 100%;
+  margin-top: 12px;
+  background: linear-gradient(135deg, #ff7a18, #ffb347);
+  color: white;
+  font-weight: 700;
+  border: none;
+  min-height: 44px;
 }
 
 .admin-manage--light .admin-manage__detail-row dd {
@@ -2649,5 +2658,140 @@
 
   .admin-sidebar__collapse-btn {
     display: none;
+  }
+}
+/* ─── Revenue stat icon (Task 1) ────────────────────────── */
+.admin-stat-card__icon--revenue {
+  background: rgba(255, 122, 24, 0.14);
+  color: var(--admin-accent);
+}
+
+/* Equal-height stat cards with aligned layout */
+.admin-stat-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 132px;
+}
+
+/* 5 cards now: use auto-fit so they wrap nicely on every breakpoint */
+.admin-stats {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+/* ─── Revenue chart card (Task 1) ───────────────────────── */
+.admin-chart-card {
+  background: var(--admin-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius-lg);
+  box-shadow: var(--admin-shadow);
+  padding: 22px 24px 16px;
+  margin-bottom: 28px;
+  max-width: 100%;
+  transition:
+    box-shadow 0.25s var(--admin-ease),
+    border-color 0.25s var(--admin-ease);
+}
+
+.admin-chart-card:hover {
+  box-shadow: var(--admin-shadow-glow), var(--admin-shadow);
+  border-color: rgba(255, 122, 24, 0.2);
+}
+
+.admin-chart-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.admin-chart-card__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--admin-text);
+  margin: 0 0 4px;
+  letter-spacing: -0.02em;
+}
+
+.admin-chart-card__subtitle {
+  font-size: 13px;
+  color: var(--admin-text-muted);
+  margin: 0;
+  font-weight: 500;
+}
+
+.admin-chart-card__range {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--admin-text-muted);
+  padding: 5px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--admin-border);
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.admin-layout--light .admin-chart-card__range {
+  background: #f8fafc;
+}
+
+.admin-chart-card__body {
+  width: 100%;
+}
+
+.admin-chart__state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: var(--admin-text-muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.admin-chart__state--error {
+  color: #fca5a5;
+}
+
+.admin-layout--light .admin-chart__state--error {
+  color: #b91c1c;
+}
+
+/* Recharts tooltip */
+.admin-chart__tooltip {
+  background: var(--admin-surface-solid);
+  border: 1px solid var(--admin-border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  box-shadow: var(--admin-shadow);
+}
+
+.admin-chart__tooltip-date {
+  margin: 0 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--admin-text-muted);
+}
+
+.admin-chart__tooltip-value {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--admin-accent);
+}
+
+/* Responsive: chart full-width + stacked cards on small screens */
+@media (max-width: 640px) {
+  .admin-chart-card {
+    padding: 18px 14px 12px;
+  }
+
+  .admin-chart-card__header {
+    flex-direction: column;
+    gap: 8px;
   }
 }

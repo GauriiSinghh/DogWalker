@@ -58,13 +58,13 @@ function Home() {
 )}
       <motion.main {...pageTransition}>
         <Hero onNav={handleNav} onBook={handleBook} />
+         <Services />
         <ProblemSolution />
         <WhyWalks />
         <HowItWorks />
         <Trust />
         <Comparison />
         <Coverage />
-        <Services />
         <Testimonials />
         <Faq />
         <Cta onBook={handleBook} />

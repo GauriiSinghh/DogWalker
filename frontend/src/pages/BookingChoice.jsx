@@ -1,9 +1,11 @@
+// src/pages/BookingChoice.jsx
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth.js";
 import { FaTimes, FaRegUser, FaGift } from "react-icons/fa";
 import { API_BASE } from "../config/api.js";
+import { payForBooking } from "../services/razorpay.js";
 import SuccessModal from "../components/SuccessModal.jsx";
 import logo from "../assets/images/logo.png";
 import "../styles/modal-base.css";
@@ -17,7 +19,7 @@ const pageTransition = {
 
 function BookingChoice() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [confirmed, setConfirmed] = useState(null);
@@ -32,6 +34,31 @@ function BookingChoice() {
     setErrorMsg("");
     try {
       const token = localStorage.getItem("token");
+
+      // Single source of truth: pull the freshest profile, sync context,
+      // and submit those exact values (covers edits made just before booking).
+      let current = user;
+      try {
+        const profileRes = await fetch(`${API_BASE}/profile`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (profileRes.ok) {
+          const fresh = await profileRes.json();
+          current = {
+            ...user,
+            name: fresh.name ?? user.name,
+            email: fresh.email ?? user.email,
+            mobile: fresh.mobile ?? user.mobile,
+            apartment: fresh.apartment ?? user.apartment,
+            flatNo: fresh.flatNo ?? user.flatNo,
+            address: fresh.address ?? user.address,
+          };
+          updateUser(current); // keep global state in sync
+        }
+      } catch {
+        // network hiccup — fall back to live context user
+      }
+
       const response = await fetch(`${API_BASE}/book`, {
         method: "POST",
         headers: {
@@ -39,12 +66,12 @@ function BookingChoice() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          apartment: user.apartment,
-          name: user.name,
-          mobile: user.mobile,
-          flatNo: user.flatNo,
-          address: user.address,
-          email: user.email,
+          apartment: current.apartment,
+          name: current.name,
+          mobile: current.mobile,
+          flatNo: current.flatNo,
+          address: current.address,
+          email: current.email,
         }),
       });
 
@@ -60,13 +87,22 @@ function BookingChoice() {
         );
       }
 
+      await payForBooking({
+        bookingId: data.id,
+        token,
+        user: current,
+        name: current.name,
+        email: current.email,
+        mobile: current.mobile,
+      });
+
       setConfirmed({
         id: data.id,
-        name: data.name || user.name,
-        apartment: data.apartment || user.apartment,
-        flatNo: user.flatNo,
-        mobile: user.mobile,
-        address: user.address,
+        name: data.name || current.name,
+        apartment: data.apartment || current.apartment,
+        flatNo: current.flatNo,
+        mobile: current.mobile,
+        address: current.address,
         date: new Date().toLocaleDateString("en-IN", {
           day: "2-digit", month: "short", year: "numeric",
         }),
