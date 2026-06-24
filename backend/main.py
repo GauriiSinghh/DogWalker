@@ -995,7 +995,22 @@ def dashboard_revenue_daily(
         for day in sorted(revenue_map.keys())
     ]
 
-    
+@app.get("/api/dashboard/stats")
+def dashboard_stats(
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    paid_bookings = db.query(Booking).filter(
+        Booking.payment_status == "paid"
+    )
+
+    return {
+        "total_bookings": paid_bookings.count(),
+        "new_bookings": paid_bookings.filter(Booking.status == "New").count(),
+        "assigned_bookings": paid_bookings.filter(Booking.status == "Assigned").count(),
+        "completed_bookings": paid_bookings.filter(Booking.status == "Completed").count(),
+    }
+       
 # ----- Booking history (current user only) -----
 def _booking_amount(booking: Booking) -> int:
     if getattr(booking, "amount", None):
