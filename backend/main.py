@@ -61,7 +61,7 @@ def _paid_booking_filter():
     return Booking.payment_status == "paid" 
 app = FastAPI(title="Paws Pal Connect API")
 
-@@app.on_event("startup")
+@app.on_event("startup")
 def init_database_tables():
     import time
 
@@ -80,20 +80,7 @@ def init_database_tables():
                 logger.info("Database tables ready (attempt %s)", attempt)
 
             return
-
-        except OperationalError as exc:
-            last_error = exc
-            logger.warning(
-                "Database connection failed on startup (attempt %s/3): %s",
-                attempt,
-                exc,
-            )
-            if attempt < 3:
-                time.sleep(2 * attempt)
-
-    raise RuntimeError(
-        "Could not connect to the database after 3 attempts."
-    ) from last_error
+            
         except OperationalError as exc:
             last_error = exc
             logger.warning(
