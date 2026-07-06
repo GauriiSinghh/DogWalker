@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, date
 
 class UserCreate(BaseModel):
     email: EmailStr
@@ -191,3 +191,45 @@ class BookingHistoryDetail(BookingHistoryItem):
 class ApartmentPriceResponse(BaseModel):
     amount: int
     apartment: str
+
+
+class WalkerBrief(BaseModel):
+    id: int
+    name: str
+    phone: str
+    profile_image: Optional[str] = None
+
+
+class FriendFamilyDetail(BaseModel):
+    name: str
+    mobile: str
+    address: str
+    emergency_contact: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class MyBookingItem(BaseModel):
+    id: str
+    service_type: str
+    booking_category: str
+    plan_name: Optional[str] = None
+    booking_date: Optional[date] = None
+    time_slot: Optional[str] = None
+    duration: Optional[int] = None
+    payment_method: Optional[str] = None
+    payment_status: str
+    amount: float
+    coupon: Optional[str] = None
+    discount: Optional[float] = 0
+    status: str
+    special_instructions: Optional[str] = None
+    address: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    walker: Optional[WalkerBrief] = None
+    friend_family: Optional[FriendFamilyDetail] = None
+
+    class Config:
+        from_attributes = True

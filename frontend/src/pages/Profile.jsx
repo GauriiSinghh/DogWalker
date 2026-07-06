@@ -2,9 +2,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, Link } from "react-router-dom";
-import { FaTimes, FaCalendarAlt, FaUser, FaPaw } from "react-icons/fa";
+import { FaTimes, FaUser, FaPaw } from "react-icons/fa";
 import { useAuth } from "../hooks/useAuth.js";
+import { useToast } from "../components/Toast.jsx";
 import { API_BASE } from "../config/api.js";
+import BookingHistoryPanel from "../components/BookingHistoryPanel.jsx";
 import logo from "../assets/images/logo.png";
 import "../styles/modal-base.css";
 import "../styles/signup.css";
@@ -26,6 +28,7 @@ function authHeaders() {
 function Profile({ view = "profile" }) {
   const navigate = useNavigate();
   const { updateUser } = useAuth();
+  const toast = useToast();
 
   const [profile, setProfile] = useState({
   name: "",
@@ -57,12 +60,6 @@ const [loading, setLoading] = useState(false);
   const [petImageError, setPetImageError] = useState("");
   const [petError, setPetError] = useState("");
   const [petSuccess, setPetSuccess] = useState("");
-
-  const [bookings, setBookings] = useState([]);
-  const [historyError, setHistoryError] = useState("");
-  const [expandedId, setExpandedId] = useState(null);
-  const [detailCache, setDetailCache] = useState({});
-  const [detailLoading, setDetailLoading] = useState(false);
 
   const APARTMENTS = [
     "Sobha Dream Acres Apartment",
@@ -104,23 +101,10 @@ const [loading, setLoading] = useState(false);
     }
   }, [updateUser]);
 
-  const loadHistory = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_BASE}/booking-history`, { headers: authHeaders() });
-      if (!res.ok) throw new Error("Could not load booking history");
-      setBookings(await res.json());
-    } catch (err) {
-      setHistoryError(err.message || "Could not load booking history");
-    }
-  }, []);
-
   useEffect(() => {
     window.scrollTo(0, 0);
     loadProfile();
-    if (view === "bookings") {
-      loadHistory();
-    }
-  }, [loadProfile, loadHistory, view]);
+  }, [loadProfile]);
 
   function validatePersonal() {
     if (form.name.trim().length < 2) return false;
@@ -152,7 +136,18 @@ const [loading, setLoading] = useState(false);
       setEditPersonal(false);
       return;
     }
+
+    const previousData = { ...profile };
+    const optimisticData = { ...profile, ...changed };
+
+    // 1. Update UI instantly
+    setProfile(optimisticData);
+    updateUser(changed);
+    setEditPersonal(false);
+    setShowErrors(false);
+
     try {
+      // 2. Sync with backend silently
       let res;
       if (profile?.id != null) {
         res = await fetch(`${API_BASE}/api/users/${profile.id}`, {
@@ -178,12 +173,21 @@ const [loading, setLoading] = useState(false);
         flatNo: data.flatNo,
         address: data.address,
       });
-      setEditPersonal(false);
-      setShowErrors(false);
       setPersonalSuccess("Profile updated!");
       setTimeout(() => setPersonalSuccess(""), 3000);
     } catch (err) {
+      // 3. Revert on failure
+      setProfile(previousData);
+      updateUser({
+        name: previousData.name,
+        email: previousData.email,
+        mobile: previousData.mobile,
+        apartment: previousData.apartment,
+        flatNo: previousData.flatNo,
+        address: previousData.address,
+      });
       setPersonalError(err.message || "Could not update profile");
+      toast.error("Failed to update. Changes reverted.");
     }
   }
 
@@ -221,6 +225,8 @@ const [loading, setLoading] = useState(false);
       setPetImage(result);
       setPetImagePreview(result);
       setPetImageChanged(true);
+      // Instant preview in global user state
+      updateUser({ pet_image: result });
     };
     reader.readAsDataURL(file);
   }
@@ -239,6 +245,22 @@ const [loading, setLoading] = useState(false);
       setEditPet(false);
       return;
     }
+
+    const previousData = { ...profile };
+    const optimisticData = {
+      ...profile,
+      pet_name: body.pet_name ?? profile.pet_name,
+      pet_image: body.pet_image ?? profile.pet_image,
+    };
+
+    // 1. Update UI instantly
+    setProfile(optimisticData);
+    updateUser({
+      pet_name: optimisticData.pet_name || "",
+      pet_image: optimisticData.pet_image || "",
+    });
+    setEditPet(false);
+
     try {
       const res = await fetch(`${API_BASE}/profile`, {
         method: "PATCH",
@@ -251,12 +273,19 @@ const [loading, setLoading] = useState(false);
       setPetName(data.pet_name || "");
       setPetImagePreview(data.pet_image || "");
       setPetImageChanged(false);
-      setEditPet(false);
       updateUser({ pet_name: data.pet_name || "", pet_image: data.pet_image || "" });
       setPetSuccess("Pet info updated!");
       setTimeout(() => setPetSuccess(""), 3000);
     } catch (err) {
+      setProfile(previousData);
+      setPetName(previousData.pet_name || "");
+      setPetImagePreview(previousData.pet_image || "");
+      updateUser({
+        pet_name: previousData.pet_name || "",
+        pet_image: previousData.pet_image || "",
+      });
       setPetError(err.message || "Could not update pet info");
+      toast.error("Failed to update. Changes reverted.");
     }
   }
 
@@ -269,36 +298,6 @@ const [loading, setLoading] = useState(false);
     setPetError("");
     setEditPet(false);
   }
-
-  async function toggleDetail(id) {
-    if (expandedId === id) {
-      setExpandedId(null);
-      return;
-    }
-    setExpandedId(id);
-    if (!detailCache[id]) {
-      setDetailLoading(true);
-      try {
-        const res = await fetch(`${API_BASE}/booking-history/${id}`, { headers: authHeaders() });
-        if (res.ok) {
-          const data = await res.json();
-          setDetailCache((prev) => ({ ...prev, [id]: data }));
-        }
-      } finally {
-        setDetailLoading(false);
-      }
-    }
-  }
-
-  const fmtDate = (iso) => {
-    if (!iso) return "—";
-    return new Date(iso).toLocaleDateString("en-IN", {
-      day: "2-digit", month: "short", year: "numeric",
-    });
-  };
-  const fmtAmount = (paise) => (paise == null ? "—" : `₹${(paise / 100).toFixed(0)}`);
-
-  
 
   if (loadError) {
     return (
@@ -322,7 +321,7 @@ const [loading, setLoading] = useState(false);
         exit="exit"
         variants={pageTransition}
         style={{
-          maxWidth: view === "bookings" ? "880px" : "640px",
+          maxWidth: view === "bookings" ? "960px" : "640px",
           width: "100%",
           marginBottom: 24,
           borderRadius: "24px",
@@ -510,142 +509,7 @@ const [loading, setLoading] = useState(false);
 
         {view === "bookings" && (
           <div className="auth-body" style={{ padding: "32px 32px 40px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "24px" }}>
-              <FaCalendarAlt style={{ color: "var(--z-primary)", fontSize: "1.2rem" }} />
-              <h2 style={{ fontSize: "1.4rem", fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>My Walking Bookings</h2>
-            </div>
-
-            {historyError && <div className="global-error">{historyError}</div>}
-
-            {bookings.length === 0 && !historyError && (
-              <div style={{ textAlign: "center", padding: "48px 16px", background: "#fcf9f6", borderRadius: "16px", border: "1px dashed rgba(0,0,0,0.06)" }}>
-                <p style={{ margin: 0, color: "var(--z-muted)", fontWeight: 600 }}>You don't have any bookings yet.</p>
-                <Link to="/booking-choice" className="btn-primary" style={{ marginTop: "16px", display: "inline-flex", width: "auto", minHeight: "40px", padding: "8px 20px" }}>
-                  Book a Walk
-                </Link>
-              </div>
-            )}
-
-            {bookings.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                {bookings.map((b) => {
-                  const isExpanded = expandedId === b.id;
-                  return (
-                    <div
-                      key={b.id}
-                      style={{
-                        background: "#ffffff",
-                        border: "1px solid rgba(0, 0, 0, 0.04)",
-                        borderRadius: "16px",
-                        boxShadow: "0 2px 8px rgba(0, 0, 0, 0.01)",
-                        overflow: "hidden",
-                        transition: "all 0.2s ease",
-                      }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => toggleDetail(b.id)}
-                        style={{
-                          width: "100%",
-                          textAlign: "left",
-                          background: isExpanded ? "rgba(255, 122, 24, 0.02)" : "#ffffff",
-                          border: "none",
-                          cursor: "pointer",
-                          padding: "16px 20px",
-                          fontFamily: "inherit",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          gap: "12px",
-                        }}
-                      >
-                        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px 24px" }}>
-                          <div>
-                            <span style={{ fontSize: "0.75rem", color: "var(--z-muted)", fontWeight: 700, textTransform: "uppercase" }}>Date</span>
-                            <div style={{ fontWeight: 700, color: "var(--z-dark)", marginTop: "2px" }}>{fmtDate(b.created_at)}</div>
-                          </div>
-                          <div>
-                            <span style={{ fontSize: "0.75rem", color: "var(--z-muted)", fontWeight: 700, textTransform: "uppercase" }}>Status</span>
-                            <div style={{ marginTop: "2px" }}>
-                              <span
-                                style={{
-                                  display: "inline-block",
-                                  padding: "3px 8px",
-                                  borderRadius: "12px",
-                                  fontSize: "0.75rem",
-                                  fontWeight: 700,
-                                  background: b.status === "New" ? "#fff3e0" : b.status === "Assigned" ? "#e3f2fd" : b.status === "Completed" ? "#e8f5e9" : "#f5f5f5",
-                                  color: b.status === "New" ? "#e65100" : b.status === "Assigned" ? "#0d47a1" : b.status === "Completed" ? "#1b5e20" : "#616161",
-                                }}
-                              >
-                                {b.status}
-                              </span>
-                            </div>
-                          </div>
-                          <div>
-                            <span style={{ fontSize: "0.75rem", color: "var(--z-muted)", fontWeight: 700, textTransform: "uppercase" }}>Payment</span>
-                            <div style={{ marginTop: "2px" }}>
-                              <span
-                                style={{
-                                  display: "inline-block",
-                                  padding: "3px 8px",
-                                  borderRadius: "12px",
-                                  fontSize: "0.75rem",
-                                  fontWeight: 700,
-                                  background: b.payment_status === "paid" ? "#e8f5e9" : "#ffebee",
-                                  color: b.payment_status === "paid" ? "#2e7d32" : "#c62828",
-                                }}
-                              >
-                                {b.payment_status === "paid" ? "Paid" : "Pending"}
-                              </span>
-                            </div>
-                          </div>
-                          <div>
-                            <span style={{ fontSize: "0.75rem", color: "var(--z-muted)", fontWeight: 700, textTransform: "uppercase" }}>Walker</span>
-                            <div style={{ fontWeight: 600, color: "var(--z-dark)", marginTop: "2px" }}>{b.assigned_walker || "Unassigned"}</div>
-                          </div>
-                        </div>
-
-                        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                          <span style={{ fontWeight: 800, fontSize: "1.1rem", color: "var(--z-dark)" }}>{fmtAmount(b.amount)}</span>
-                          <span style={{ color: "var(--z-muted)", transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s ease" }}>▼</span>
-                        </div>
-                      </button>
-
-                      {isExpanded && (
-                        <div style={{ padding: "20px", background: "#fcfbfb", borderTop: "1px solid rgba(0, 0, 0, 0.03)" }}>
-                          {detailLoading && !detailCache[b.id] ? (
-                            <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--z-muted)" }}>Loading details…</p>
-                          ) : detailCache[b.id] ? (
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", fontSize: "0.88rem" }}>
-                              <div>
-                                <div style={{ color: "var(--z-muted)", fontWeight: 600 }}>Booking Details</div>
-                                <div style={{ marginTop: "4px" }}><strong>ID:</strong> #{detailCache[b.id].id}</div>
-                                <div><strong>Pet Name:</strong> {detailCache[b.id].pet_name || "—"}</div>
-                                <div><strong>Owner Mobile:</strong> {detailCache[b.id].mobile}</div>
-                              </div>
-                              <div>
-                                <div style={{ color: "var(--z-muted)", fontWeight: 600 }}>Service Location</div>
-                                <div style={{ marginTop: "4px" }}><strong>Apartment:</strong> {detailCache[b.id].apartment}</div>
-                                <div><strong>Flat/Villa:</strong> {detailCache[b.id].flatNo}</div>
-                                <div><strong>Address:</strong> {detailCache[b.id].address}</div>
-                              </div>
-                              <div>
-                                <div style={{ color: "var(--z-muted)", fontWeight: 600 }}>Payment Summary</div>
-                                <div style={{ marginTop: "4px" }}><strong>Order ID:</strong> {detailCache[b.id].razorpay_order_id || "—"}</div>
-                                <div><strong>Payment ID:</strong> {detailCache[b.id].razorpay_payment_id || "—"}</div>
-                              </div>
-                            </div>
-                          ) : (
-                            <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--z-error)" }}>Could not load details.</p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <BookingHistoryPanel />
           </div>
         )}
       </motion.div>

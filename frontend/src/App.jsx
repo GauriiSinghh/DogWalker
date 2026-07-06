@@ -1,6 +1,7 @@
 import { Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { AuthProvider } from "./components/AuthContext.jsx";
+import { ToastProvider } from "./components/Toast.jsx";
 import Navbar from "./components/home/Navbar.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import Home from "./pages/Home.jsx";
@@ -40,6 +41,7 @@ const isPolicyPage = location.pathname.startsWith("/policy/");
     
 
     <AuthProvider>
+      <ToastProvider>
       {!hideNavbar && <Navbar />}
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
@@ -115,6 +117,7 @@ const isPolicyPage = location.pathname.startsWith("/policy/");
 />
         </Routes>
       </AnimatePresence>
+      </ToastProvider>
     </AuthProvider>
   );
 }

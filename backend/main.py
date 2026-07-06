@@ -9,14 +9,14 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, date
 from fastapi.staticfiles import StaticFiles
 from db import engine, SessionLocal, get_db, Base
-from models import User, Pet, Walker, Booking, Page, Admin
+from models import User, Pet, Walker, Booking, Page, Admin, FriendFamilyBooking
 from schemas import (
     UserCreate, UserLogin, UserResponse, BookingRequest, BookingResponse, BookingUpdate,
     PageResponse, AdminLogin, WalkerResponse, WalkerCreate, WalkerDetailResponse,
     CustomerSummary, CustomerDetailResponse, CustomerBookingSummary,
     CreateOrderRequest, CreateOrderResponse, VerifyPaymentRequest, VerifyPaymentResponse,
-    ProfileResponse, ProfileUpdate, BookingHistoryItem, BookingHistoryDetail,  # ADDED
-    ApartmentPriceResponse,  # ADDED
+    ProfileResponse, ProfileUpdate, BookingHistoryItem, BookingHistoryDetail,
+    ApartmentPriceResponse, MyBookingItem, WalkerBrief, FriendFamilyDetail,
 )
 from auth import hash_password, verify_password, create_access_token, get_current_user, get_current_admin
 from email_service import send_booking_email, send_user_confirmation_email
@@ -394,6 +394,95 @@ def _serialize_booking(booking: Booking, db: Session) -> dict:
     }
 
 
+def _normalize_status(status: str | None) -> str:
+    mapping = {
+        "New": "PENDING",
+        "Assigned": "CONFIRMED",
+        "Completed": "COMPLETED",
+        "Cancelled": "CANCELLED",
+    }
+    if status in mapping:
+        return mapping[status]
+    return (status or "PENDING").upper()
+
+
+def _normalize_payment_status(payment_status: str | None) -> str:
+    if payment_status and payment_status.lower() == "paid":
+        return "PAID"
+    return "PENDING"
+
+
+def _serialize_my_booking(booking: Booking, db: Session) -> MyBookingItem:
+    walker_brief = None
+    if booking.walker_id:
+        walker = db.query(Walker).filter(Walker.id == booking.walker_id).first()
+        if walker:
+            walker_brief = WalkerBrief(
+                id=walker.id,
+                name=walker.name,
+                phone=walker.mobile,
+                profile_image=getattr(walker, "profile_image", None),
+            )
+    elif booking.assigned_walker:
+        walker = db.query(Walker).filter(Walker.name == booking.assigned_walker).first()
+        if walker:
+            walker_brief = WalkerBrief(
+                id=walker.id,
+                name=walker.name,
+                phone=walker.mobile,
+                profile_image=getattr(walker, "profile_image", None),
+            )
+        else:
+            walker_brief = WalkerBrief(
+                id=0,
+                name=booking.assigned_walker,
+                phone="",
+                profile_image=None,
+            )
+
+    ff = (
+        db.query(FriendFamilyBooking)
+        .filter(FriendFamilyBooking.booking_id == booking.id)
+        .first()
+    )
+    friend_family = None
+    if ff:
+        friend_family = FriendFamilyDetail(
+            name=ff.name,
+            mobile=ff.mobile,
+            address=ff.address,
+            emergency_contact=ff.emergency_contact,
+            notes=ff.notes,
+        )
+
+    amount_rupees = (booking.amount or _resolve_apartment_amount(booking.apartment)) / 100
+    discount = getattr(booking, "discount", 0) or 0
+
+    return MyBookingItem(
+        id=booking.booking_code or f"BK{booking.id:05d}",
+        service_type=getattr(booking, "service_type", None) or "Dog Walking",
+        booking_category=getattr(booking, "booking_category", None) or "One-Time",
+        plan_name=getattr(booking, "plan_name", None) or booking.apartment,
+        booking_date=getattr(booking, "booking_date", None),
+        time_slot=getattr(booking, "time_slot", None) or "6 PM - 9 PM",
+        duration=getattr(booking, "duration", None) or 60,
+        payment_method=getattr(booking, "payment_method", None) or "Online",
+        payment_status=_normalize_payment_status(booking.payment_status),
+        amount=round(amount_rupees - discount, 2),
+        coupon=getattr(booking, "coupon", None),
+        discount=discount,
+        status=_normalize_status(booking.status),
+        special_instructions=getattr(booking, "special_instructions", None),
+        address=booking.address,
+        latitude=getattr(booking, "latitude", None),
+        longitude=getattr(booking, "longitude", None),
+        created_at=booking.created_at,
+        updated_at=getattr(booking, "updated_at", None) or booking.created_at,
+        walker=walker_brief,
+        friend_family=friend_family,
+    )
+
+
 def _build_customer_summaries(db: Session) -> list[CustomerSummary]:
     bookings = (
         db.query(Booking)
@@ -541,12 +630,23 @@ async def create_booking(
         address=booking_data.address,
         pet_name=pet_name,
         pet_image=pet_image,
+        service_type=getattr(booking_data, "service_type", None) or "Dog Walking",
+        booking_category=getattr(booking_data, "booking_category", None) or "One-Time",
+        plan_name=getattr(booking_data, "plan_name", None) or booking_data.apartment,
+        booking_date=getattr(booking_data, "booking_date", None) or date.today(),
+        time_slot=getattr(booking_data, "time_slot", None) or "6 PM - 9 PM",
+        duration=getattr(booking_data, "duration", None) or 60,
+        payment_method=getattr(booking_data, "payment_method", None) or "Online",
         status="New",
         assigned_walker=None,
         payment_status="pending",
         amount=_resolve_apartment_amount(booking_data.apartment),
     )
     db.add(new_booking)
+    db.commit()
+    db.refresh(new_booking)
+
+    new_booking.booking_code = f"BK{new_booking.id:05d}"
     db.commit()
     db.refresh(new_booking)
 
@@ -667,6 +767,7 @@ async def update_booking(
             _set_walker_availability(db, previous_walker, True)
 
         booking.assigned_walker = walker.name
+        booking.walker_id = walker.id
         walker.is_available = False
 
     booking.status = update.status
@@ -1109,6 +1210,21 @@ def get_booking_history_detail(
         pet_name=booking.pet_name,
         pet_image=booking.pet_image,
     )
+
+
+@app.get("/api/bookings/my", response_model=list[MyBookingItem])
+def get_my_bookings(
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return all bookings for the authenticated user with full detail."""
+    bookings = (
+        db.query(Booking)
+        .filter(Booking.user_id == int(user_id))
+        .order_by(Booking.created_at.desc())
+        .all()
+    )
+    return [_serialize_my_booking(b, db) for b in bookings]
 
 
 # ----- Logout (stateless) -----
