@@ -61,18 +61,39 @@ def _paid_booking_filter():
     return Booking.payment_status == "paid" 
 app = FastAPI(title="Paws Pal Connect API")
 
-@app.on_event("startup")
+@@app.on_event("startup")
 def init_database_tables():
-    """Create missing tables; retry for Neon cold starts / transient pooler drops."""
     import time
 
     last_error = None
     for attempt in range(1, 4):
         try:
             Base.metadata.create_all(bind=engine)
+
+            from create_admin import create_admin
+            from create_walkers import create_walkers
+
+            create_admin()
+            create_walkers()
+
             if attempt > 1:
                 logger.info("Database tables ready (attempt %s)", attempt)
+
             return
+
+        except OperationalError as exc:
+            last_error = exc
+            logger.warning(
+                "Database connection failed on startup (attempt %s/3): %s",
+                attempt,
+                exc,
+            )
+            if attempt < 3:
+                time.sleep(2 * attempt)
+
+    raise RuntimeError(
+        "Could not connect to the database after 3 attempts."
+    ) from last_error
         except OperationalError as exc:
             last_error = exc
             logger.warning(

@@ -9,20 +9,28 @@ DEFAULT_WALKERS = [
     {"name": "Karan Singh", "mobile": "9876500005"},
 ]
 
-db = SessionLocal()
 
-created = 0
-for walker_data in DEFAULT_WALKERS:
-    existing = db.query(Walker).filter(Walker.name == walker_data["name"]).first()
-    if existing:
-        print(f"Walker already exists: {walker_data['name']}")
-        continue
+def create_walkers():
+    db = SessionLocal()
 
-    db.add(Walker(**walker_data, is_available=True))
-    created += 1
-    print(f"Walker created: {walker_data['name']}")
+    created = 0
 
-db.commit()
-db.close()
+    for walker_data in DEFAULT_WALKERS:
+        existing = db.query(Walker).filter(
+            Walker.name == walker_data["name"]
+        ).first()
 
-print(f"Done. {created} new walker(s) added.")
+        if existing:
+            continue
+
+        db.add(Walker(**walker_data, is_available=True))
+        created += 1
+
+    db.commit()
+    db.close()
+
+    print(f"Created {created} walker(s)")
+
+
+if __name__ == "__main__":
+    create_walkers()
