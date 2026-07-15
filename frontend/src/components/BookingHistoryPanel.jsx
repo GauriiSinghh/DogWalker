@@ -9,8 +9,10 @@ import {
   CalendarDays,
   RefreshCw,
 } from "lucide-react";
-import { fetchMyBookings } from "../services/bookingApi";
+import { fetchMyBookings, cancelBooking, getBookingsWebSocketUrl } from "../services/bookingApi";
+import CancellationModal from "./CancellationModal";
 import "../styles/booking-history.css";
+
 
 const SERVICE_ICONS = {
   "Dog Walking": Footprints,
@@ -77,6 +79,9 @@ export default function BookingHistoryPanel() {
   const [dateFilter, setDateFilter] = useState("");
   const [expandedId, setExpandedId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [cancellingId, setCancellingId] = useState(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [selectedBookingForCancel, setSelectedBookingForCancel] = useState(null);
 
   const loadBookings = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -107,6 +112,56 @@ export default function BookingHistoryPanel() {
       window.removeEventListener("focus", onFocus);
     };
   }, [loadBookings]);
+
+  // WebSocket: live status updates (e.g. cancellation)
+  useEffect(() => {
+    let ws;
+    try {
+      ws = new WebSocket(getBookingsWebSocketUrl());
+    } catch {
+      return undefined;
+    }
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type !== "booking:status_updated" && data.type !== "status_updated") {
+          return;
+        }
+        setBookings((prev) =>
+          prev.map((b) =>
+            b.booking_id === data.booking_id
+              ? { ...b, status: data.status === "Cancelled" ? "CANCELLED" : b.status }
+              : b
+          )
+        );
+        loadBookings(true);
+      } catch {
+        loadBookings(true);
+      }
+    };
+
+    return () => {
+      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        ws.close();
+      }
+    };
+  }, [loadBookings]);
+
+  const onConfirmCancel = async (bookingId, reason, role) => {
+    setCancellingId(bookingId);
+    setError("");
+    try {
+      await cancelBooking(bookingId, reason, "customer");
+      await loadBookings(true);
+    } catch (err) {
+      setError(err.message || "Could not cancel booking");
+      throw err;
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
 
   const summary = useMemo(() => {
     const total = bookings.length;
@@ -356,6 +411,19 @@ export default function BookingHistoryPanel() {
                         {b.special_instructions}
                       </div>
                     )}
+                    {b.status === "CANCELLED" && (
+                      <div style={{ gridColumn: "1 / -1", borderTop: "1px solid var(--z-border, #e2e8f0)", paddingTop: "12px", marginTop: "4px" }}>
+                        <div className="bh-detail-label" style={{ color: "#ef4444" }}>Cancellation Details</div>
+                        {b.cancelled_by === "admin" && (
+                          <div style={{ fontSize: "0.95rem", marginBottom: "4px" }}>
+                            <strong>Cancelled by:</strong> Admin
+                          </div>
+                        )}
+                        <div style={{ fontSize: "0.95rem" }}>
+                          <strong>Reason:</strong> {b.cancellation_reason || "No reason provided"}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -374,8 +442,16 @@ export default function BookingHistoryPanel() {
                     <button type="button" className="bh-action-btn">Invoice</button>
                   )}
                   {["PENDING", "CONFIRMED"].includes(b.status) && (
-                    <button type="button" className="bh-action-btn bh-action-btn--danger">
-                      Cancel
+                    <button
+                      type="button"
+                      className="bh-action-btn bh-action-btn--danger"
+                      disabled={cancellingId === b.booking_id}
+                      onClick={() => {
+                        setSelectedBookingForCancel(b);
+                        setShowCancelModal(true);
+                      }}
+                    >
+                      {cancellingId === b.booking_id ? "Cancelling…" : "Cancel"}
                     </button>
                   )}
                   {b.status === "COMPLETED" && b.walker && (
@@ -390,6 +466,17 @@ export default function BookingHistoryPanel() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <CancellationModal
+        open={showCancelModal}
+        onClose={() => {
+          setShowCancelModal(false);
+          setSelectedBookingForCancel(null);
+        }}
+        onConfirm={onConfirmCancel}
+        bookingId={selectedBookingForCancel?.booking_id}
+        role="customer"
+      />
     </div>
   );
 }

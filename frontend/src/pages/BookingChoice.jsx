@@ -36,79 +36,7 @@ function BookingChoice() {
   document.body.appendChild(script);
 }, []);
 
-  const handleBookForMyself = async () => {
-    setLoading(true);
-    setErrorMsg("");
-    try {
-      const token = localStorage.getItem("token");
-
-      // Single source of truth: pull the freshest profile, sync context,
-      // and submit those exact values (covers edits made just before booking).
-     const current = user;
-
-      const response = await fetch(`${API_BASE}/book`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          apartment: current.apartment,
-          name: current.name,
-          mobile: current.mobile,
-          flatNo: current.flatNo,
-          address: current.address,
-          email: current.email,
-        }),
-      });
-
-      let data = {};
-      try {
-        data = await response.json();
-      } catch {
-        data = {};
-      }
-      if (!response.ok) {
-        throw new Error(
-          typeof data.detail === "string" ? data.detail : "Booking failed"
-        );
-      }
-
-      await payForBooking({
-        bookingId: data.id,
-        token,
-        user: current,
-        name: current.name,
-        email: current.email,
-        mobile: current.mobile,
-      });
-
-      setConfirmed({
-        id: data.id,
-        name: data.name || current.name,
-        apartment: data.apartment || current.apartment,
-        flatNo: current.flatNo,
-        mobile: current.mobile,
-        address: current.address,
-        date: new Date().toLocaleDateString("en-IN", {
-          day: "2-digit", month: "short", year: "numeric",
-        }),
-        time: new Date().toLocaleTimeString("en-IN", {
-          hour: "2-digit", minute: "2-digit", hour12: true,
-        }),
-      });
-    } catch (err) {
-      setErrorMsg(
-        err.name === "TypeError"
-          ? "Unable to reach the server. Please try again."
-          : err.message || "Booking failed. Please try again."
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (!user) return null;
+  
 
   return (
     <>
@@ -139,7 +67,14 @@ function BookingChoice() {
               <button 
                 type="button"
                 className="choice-card"
-                onClick={handleBookForMyself}
+             onClick={() =>
+  navigate("/booking", {
+    state: {
+      mode: "self",
+      step: "pet",
+    },
+  })
+}
                 disabled={loading}
               >
                 <div className="choice-icon-wrap">

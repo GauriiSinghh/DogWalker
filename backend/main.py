@@ -1,14 +1,20 @@
 import os
 import asyncio
 import logging
+import uuid
 import razorpay
+
 from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, OperationalError
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
+from sqlalchemy import func, or_
 from fastapi.staticfiles import StaticFiles
-from db import engine, SessionLocal, get_db, Base
+from pydantic import BaseModel
+from typing import Optional
+
+from db import engine, get_db, Base
 from models import User, Pet, Walker, Booking, Page, Admin, FriendFamilyBooking
 from schemas import (
     UserCreate, UserLogin, UserResponse, BookingRequest, BookingResponse, BookingUpdate,
@@ -17,22 +23,25 @@ from schemas import (
     CreateOrderRequest, CreateOrderResponse, VerifyPaymentRequest, VerifyPaymentResponse,
     ProfileResponse, ProfileUpdate, BookingHistoryItem, BookingHistoryDetail,
     ApartmentPriceResponse, MyBookingItem, WalkerBrief, FriendFamilyDetail,
+    BookingCancelRequest, BookingCancelResponse,
+    WalkerLogin, WalkerProfileOut, WalkerProfileUpdate,
+    WalkerAvailabilityUpdate, BookingStatusUpdate, WalkerUpdateAdmin, WalkerPasswordChange,
+    PetCreate, PetUpdate, PetResponse, PetBrief,
 )
-from auth import hash_password, verify_password, create_access_token, get_current_user, get_current_admin
+from auth import (
+    hash_password, verify_password, create_access_token,
+    get_current_user, get_current_admin, get_authenticated_actor,
+    get_current_walker,
+)
 from email_service import send_booking_email, send_user_confirmation_email
 from websocket_manager import manager
-from sqlalchemy.exc import OperationalError
-from pydantic import BaseModel
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
 BOOKING_AMOUNT_PAISE = int(os.getenv("BOOKING_AMOUNT_PAISE", "19900"))
-# ===== ADD near the top of main.py, after BOOKING_AMOUNT_PAISE definition =====
 
-# Apartment-based pricing (paise). Must match frontend APARTMENT_PRICES exactly.
 APARTMENT_PRICES = {
     "Sobha Dream Acres Apartment": 19900,
     "Prestige Shantiniketan": 24900,
@@ -42,7 +51,6 @@ APARTMENT_PRICES = {
 
 
 def _resolve_apartment_amount(apartment: str | None) -> int:
-    """Return validated server-side amount for an apartment, else default."""
     if apartment and apartment in APARTMENT_PRICES:
         return APARTMENT_PRICES[apartment]
     return BOOKING_AMOUNT_PAISE
@@ -58,8 +66,76 @@ def _get_razorpay_client():
 
 
 def _paid_booking_filter():
-    return Booking.payment_status == "paid" 
+    return Booking.payment_status == "paid"
+
+
 app = FastAPI(title="Paws Pal Connect API")
+
+TERMINAL_BOOKING_STATUSES = {"Completed", "Cancelled"}
+ACTIVE_BOOKING_STATUSES = {"Assigned", "Started", "Reached"}
+
+
+def _as_utc(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _serialize_pet(pet: Pet) -> dict:
+    return {
+        "id": pet.id,
+        "pet_id": pet.pet_id,
+        "user_id": pet.user_id,
+        "name": pet.name,
+        "pet_image": pet.image_url,
+        "image_url": pet.image_url,
+        "created_at": _as_utc(pet.created_at),
+        "updated_at": _as_utc(getattr(pet, "updated_at", None)),
+    }
+
+
+def _get_user_or_404(db: Session, user_id: int | str) -> User:
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+def _get_primary_pet(db: Session, user_id: int) -> Pet | None:
+    return (
+        db.query(Pet)
+        .filter(Pet.user_id == user_id)
+        .order_by(Pet.id.asc())
+        .first()
+    )
+
+
+def _ensure_user_has_legacy_pet(db: Session, user: User) -> bool:
+    existing = _get_primary_pet(db, user.id)
+    if existing:
+        return False
+
+    if not (user.pet_name or user.pet_image):
+        return False
+
+    pet_name = (user.pet_name or "My Pet").strip() or "My Pet"
+    pet = Pet(user_id=user.id, name=pet_name, image_url=user.pet_image)
+    db.add(pet)
+    db.flush()
+    return True
+
+
+def _sync_user_primary_pet_from_pets(db: Session, user: User) -> None:
+    primary = _get_primary_pet(db, user.id)
+    if primary:
+        user.pet_name = primary.name
+        user.pet_image = primary.image_url
+    else:
+        user.pet_name = None
+        user.pet_image = None
+
 
 @app.on_event("startup")
 def init_database_tables():
@@ -72,15 +148,21 @@ def init_database_tables():
 
             from create_admin import create_admin
             from create_walkers import create_walkers
+            from migrate_cancellation_fields import migrate_cancellation_fields
+            from migrate_cancelled_by import migrate_cancelled_by
+            from migrate_user_pets import migrate_user_pets
 
             create_admin()
             create_walkers()
+            migrate_cancellation_fields()
+            migrate_cancelled_by()
+            migrate_user_pets()
 
             if attempt > 1:
                 logger.info("Database tables ready (attempt %s)", attempt)
 
             return
-            
+
         except OperationalError as exc:
             last_error = exc
             logger.warning(
@@ -95,13 +177,14 @@ def init_database_tables():
         "Could not connect to the database after 3 attempts. "
         "Check DATABASE_URL and your network, then restart the server."
     ) from last_error
+
+
 app.mount(
     "/policies",
     StaticFiles(directory="policies"),
-    name="policies"
+    name="policies",
 )
 
-# CORS — allow local dev, explicit FRONTEND_URL, and any Render frontend subdomain
 FRONTEND_URL = (os.getenv("FRONTEND_URL") or "https://zuppy.onrender.com").rstrip("/")
 CORS_ORIGINS = list({
     FRONTEND_URL,
@@ -118,18 +201,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ===== HEALTH CHECK =====
+
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
     return {"status": "ok", "message": "Paws Pal Connect API is running"}
 
-# ===== AUTH ENDPOINTS =====
 
 @app.post("/signup")
 def signup(user_data: UserCreate, db: Session = Depends(get_db)):
-    """Create a new user account"""
-    print(f"Signup request for email: {user_data.email}")
-
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user:
         raise HTTPException(
@@ -149,6 +228,7 @@ def signup(user_data: UserCreate, db: Session = Depends(get_db)):
             address=user_data.address,
             pet_name=user_data.pet_name,
             pet_image=user_data.pet_image,
+            owner_id=uuid.uuid4(),
         )
         db.add(new_user)
         db.commit()
@@ -158,13 +238,13 @@ def signup(user_data: UserCreate, db: Session = Depends(get_db)):
             user_id=new_user.id,
             name=user_data.pet_name,
             image_url=user_data.pet_image,
+            pet_id=uuid.uuid4(),
         )
         db.add(pet)
         db.commit()
 
         access_token = create_access_token(data={"sub": str(new_user.id)})
         user_response = UserResponse.model_validate(new_user)
-        print(f"User {user_data.email} signed up successfully")
 
         return {
             "user": user_response,
@@ -179,77 +259,67 @@ def signup(user_data: UserCreate, db: Session = Depends(get_db)):
             detail="Could not create account. Please try again.",
         )
 
+
 @app.post("/login")
 def login(user_data: UserLogin, db: Session = Depends(get_db)):
-    """Authenticate user and return JWT"""
-    print(f"Login request for email: {user_data.email}")
-    
     user = db.query(User).filter(User.email == user_data.email).first()
-   
+
     if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
+            detail="Invalid email or password",
         )
-    
+
     access_token = create_access_token(data={"sub": str(user.id)})
     user_response = UserResponse.model_validate(user)
-    
-    print(f"User {user_data.email} logged in successfully")
-    
+
     return {
         "user": user_response,
         "access_token": access_token,
-        "token_type": "bearer"
+        "token_type": "bearer",
     }
 
-@app.post("/admin/login")
-def admin_login(
-    admin_data: AdminLogin,
-    db: Session = Depends(get_db)
-):
-    admin = db.query(Admin).filter(
-        Admin.email == admin_data.email
-    ).first()
-   
-    if not admin:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid admin credentials"
-        )
-    
 
-    if not verify_password(
-        admin_data.password,
-        admin.hashed_password
-    ):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid admin credentials"
-        )
+@app.post("/admin/login")
+def admin_login(admin_data: AdminLogin, db: Session = Depends(get_db)):
+    admin = db.query(Admin).filter(Admin.email == admin_data.email).first()
+
+    if not admin or not verify_password(admin_data.password, admin.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid admin credentials")
 
     access_token = create_access_token(
         data={
             "sub": str(admin.id),
-            "role": "admin"
+            "role": "admin",
         }
     )
 
     return {
         "access_token": access_token,
-        "token_type": "bearer"
+        "token_type": "bearer",
     }
 
-# ===== BOOKING ENDPOINT =====
 
-def _busy_walker_names(db: Session, exclude_booking_id: int | None = None) -> set[str]:
-    query = db.query(Booking.assigned_walker).filter(
-        Booking.status == "Assigned",
-        Booking.assigned_walker.isnot(None),
+def _busy_walker_ids(db: Session, exclude_booking_id: int | None = None) -> set[int]:
+    q = db.query(Booking.walker_id).filter(
+        Booking.walker_id.isnot(None),
+        Booking.status.notin_(list(TERMINAL_BOOKING_STATUSES)),
     )
     if exclude_booking_id is not None:
-        query = query.filter(Booking.id != exclude_booking_id)
-    return {row[0] for row in query.distinct().all()}
+        q = q.filter(Booking.id != exclude_booking_id)
+
+    return {int(row[0]) for row in q.distinct().all() if row[0] is not None}
+
+
+def _busy_walker_names(db: Session, exclude_booking_id: int | None = None) -> set[str]:
+    q = db.query(Booking.assigned_walker).filter(
+        Booking.assigned_walker.isnot(None),
+        Booking.status.notin_(list(TERMINAL_BOOKING_STATUSES)),
+    )
+    if exclude_booking_id is not None:
+        q = q.filter(Booking.id != exclude_booking_id)
+
+    return {row[0] for row in q.distinct().all() if row[0]}
 
 
 def _set_walker_availability(db: Session, walker_name: str | None, available: bool) -> None:
@@ -258,6 +328,74 @@ def _set_walker_availability(db: Session, walker_name: str | None, available: bo
     walker = db.query(Walker).filter(Walker.name == walker_name).first()
     if walker:
         walker.is_available = available
+
+
+def _release_booking_walker(db: Session, booking: Booking) -> None:
+    if booking.walker_id:
+        walker = db.query(Walker).filter(Walker.id == booking.walker_id).first()
+        if walker:
+            walker.is_available = True
+            return
+    if booking.assigned_walker:
+        _set_walker_availability(db, booking.assigned_walker, True)
+
+
+async def _broadcast_booking_status_updated(booking: Booking) -> None:
+    await manager.broadcast({
+        "type": "booking:status_updated",
+        "booking_id": booking.id,
+        "status": booking.status,
+        "cancelled_at": booking.cancelled_at.isoformat() if booking.cancelled_at else None,
+        "cancellation_reason": booking.cancellation_reason,
+        "cancelled_by": booking.cancelled_by,
+    })
+
+
+def _booking_cancel_response(booking: Booking, message: str) -> BookingCancelResponse:
+    return BookingCancelResponse(
+        message=message,
+        booking_id=booking.id,
+        status="Cancelled",
+        cancelled_at=booking.cancelled_at,
+        cancellation_reason=booking.cancellation_reason,
+        cancelled_by=booking.cancelled_by,
+    )
+
+
+def _walker_uniqueness_errors(
+    db: Session,
+    *,
+    name: str | None = None,
+    email: str | None = None,
+    mobile_number: str | None = None,
+    exclude_walker_id: int | None = None,
+) -> dict:
+    errors: dict[str, str] = {}
+
+    if name:
+        q = db.query(Walker).filter(func.lower(Walker.name) == name.lower())
+        if exclude_walker_id is not None:
+            q = q.filter(Walker.id != exclude_walker_id)
+        if q.first():
+            errors["name"] = "Walker name already exists"
+
+    if email:
+        q = db.query(Walker).filter(func.lower(Walker.email) == email.lower())
+        if exclude_walker_id is not None:
+            q = q.filter(Walker.id != exclude_walker_id)
+        if q.first():
+            errors["email"] = "Email already registered"
+
+    if mobile_number:
+        q = db.query(Walker).filter(
+            or_(Walker.mobile == mobile_number, Walker.mobile_number == mobile_number)
+        )
+        if exclude_walker_id is not None:
+            q = q.filter(Walker.id != exclude_walker_id)
+        if q.first():
+            errors["mobile_number"] = "Mobile number already registered"
+
+    return errors
 
 
 @app.get("/walkers", response_model=list[WalkerResponse])
@@ -271,7 +409,7 @@ def get_walkers(
     if not available:
         return walkers
 
-    busy = _busy_walker_names(db, exclude_booking_id=booking_id)
+    busy_ids = _busy_walker_ids(db, exclude_booking_id=booking_id)
     current_walker_name = None
     if booking_id is not None:
         booking = db.query(Booking).filter(Booking.id == booking_id).first()
@@ -280,8 +418,10 @@ def get_walkers(
 
     return [
         w for w in walkers
-        if w.name not in busy
-        and (w.is_available or w.name == current_walker_name)
+        if w.is_active and (
+            (w.is_available and w.id not in busy_ids)
+            or (w.name == current_walker_name)
+        )
     ]
 
 
@@ -294,6 +434,25 @@ def _walker_stats(db: Session, walker: Walker) -> dict:
         Booking.assigned_walker == walker.name,
     ).count()
     return {"active_assignments": active, "total_assignments": total}
+
+
+@app.get("/walkers/validate")
+def validate_walker_unique(
+    name: str | None = None,
+    email: str | None = None,
+    mobile_number: str | None = None,
+    exclude_walker_id: int | None = None,
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    errors = _walker_uniqueness_errors(
+        db,
+        name=name.strip() if name else None,
+        email=email.strip().lower() if email else None,
+        mobile_number=mobile_number.strip() if mobile_number else None,
+        exclude_walker_id=exclude_walker_id,
+    )
+    return {"ok": not bool(errors), "errors": errors}
 
 
 @app.get("/walkers/{walker_id}", response_model=WalkerDetailResponse)
@@ -321,21 +480,102 @@ def create_walker(
     db: Session = Depends(get_db),
 ):
     name = data.name.strip()
-    mobile = data.mobile.strip()
-    if len(name) < 2:
-        raise HTTPException(status_code=400, detail="Walker name is required")
-    if not mobile:
-        raise HTTPException(status_code=400, detail="Mobile number is required")
+    email = data.email.strip().lower()
+    mobile_number = data.mobile_number.strip()
+    password = data.password
+    address = data.address.strip()
+    profile_image = data.profile_image.strip() if data.profile_image else None
 
-    existing = db.query(Walker).filter(Walker.name == name).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="A walker with this name already exists")
+    errors = _walker_uniqueness_errors(
+        db,
+        name=name,
+        email=email,
+        mobile_number=mobile_number,
+    )
 
-    walker = Walker(name=name, mobile=mobile, is_available=data.is_available)
-    db.add(walker)
-    db.commit()
-    db.refresh(walker)
-    return walker
+    if errors:
+        raise HTTPException(status_code=400, detail={"errors": errors})
+
+    walker = Walker(
+        name=name,
+        email=email,
+        mobile=mobile_number,
+        mobile_number=mobile_number,
+        hashed_password=hash_password(password),
+        address=address,
+        profile_image=profile_image,
+        is_available=data.is_available,
+        is_active=True,
+    )
+
+    try:
+        db.add(walker)
+        db.commit()
+        db.refresh(walker)
+        return walker
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Failed to create walker")
+        raise HTTPException(status_code=500, detail="Could not create walker")
+
+
+@app.patch("/walkers/{walker_id}", response_model=WalkerResponse)
+def admin_update_walker(
+    walker_id: int,
+    body: WalkerUpdateAdmin,
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    walker = db.query(Walker).filter(Walker.id == walker_id).first()
+    if not walker:
+        raise HTTPException(status_code=404, detail="Walker not found")
+
+    data = body.model_dump(exclude_unset=True)
+
+    errors = _walker_uniqueness_errors(
+        db,
+        name=data.get("name") if data.get("name") else None,
+        email=str(data.get("email")).lower() if data.get("email") else None,
+        mobile_number=data.get("mobile_number") if data.get("mobile_number") else None,
+        exclude_walker_id=walker_id,
+    )
+    if errors:
+        raise HTTPException(status_code=400, detail={"errors": errors})
+
+    if data.get("name") is not None:
+        walker.name = data["name"].strip()
+
+    if data.get("email") is not None:
+        walker.email = str(data["email"]).strip().lower()
+
+    if data.get("mobile_number") is not None:
+        walker.mobile_number = data["mobile_number"].strip()
+        walker.mobile = data["mobile_number"].strip()
+
+    if "address" in data and data["address"] is not None:
+        walker.address = data["address"].strip()
+
+    if "profile_image" in data:
+        walker.profile_image = data["profile_image"].strip() if data["profile_image"] else None
+
+    if "is_available" in data and data["is_available"] is not None:
+        walker.is_available = bool(data["is_available"])
+
+    if "is_active" in data and data["is_active"] is not None:
+        walker.is_active = bool(data["is_active"])
+
+    if data.get("password"):
+        walker.hashed_password = hash_password(data["password"])
+
+    try:
+        db.add(walker)
+        db.commit()
+        db.refresh(walker)
+        return walker
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Failed to update walker %s", walker_id)
+        raise HTTPException(status_code=500, detail="Could not update walker")
 
 
 @app.delete("/walkers/{walker_id}")
@@ -349,14 +589,11 @@ def delete_walker(
         raise HTTPException(status_code=404, detail="Walker not found")
 
     active = db.query(Booking).filter(
-        Booking.assigned_walker == walker.name,
-        Booking.status == "Assigned",
+        Booking.walker_id == walker.id,
+        Booking.status.notin_(list(TERMINAL_BOOKING_STATUSES)),
     ).first()
     if active:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot remove a walker with an active booking assignment",
-        )
+        raise HTTPException(status_code=400, detail="Walker has active bookings.")
 
     db.delete(walker)
     db.commit()
@@ -367,12 +604,21 @@ def _resolve_pet_fields(
     pet_name: str | None,
     pet_image: str | None,
     user: User | None,
+    pet: Pet | None = None,
 ) -> tuple[str | None, str | None]:
     if pet_name:
         return pet_name, pet_image
+    if pet:
+        return pet.name, pet.image_url
     if user:
         return user.pet_name, user.pet_image
     return None, None
+
+
+def _booking_pet(db: Session, booking: Booking) -> Pet | None:
+    if not getattr(booking, "pet_id", None):
+        return None
+    return db.query(Pet).filter(Pet.id == booking.pet_id).first()
 
 
 def _serialize_booking(booking: Booking, db: Session) -> dict:
@@ -380,13 +626,21 @@ def _serialize_booking(booking: Booking, db: Session) -> dict:
     if booking.user_id:
         user = db.query(User).filter(User.id == booking.user_id).first()
 
+    pet = _booking_pet(db, booking)
     pet_name, pet_image = _resolve_pet_fields(
-        booking.pet_name, booking.pet_image, user
+        booking.pet_name,
+        booking.pet_image,
+        user,
+        pet,
     )
+
+    amount_paise = booking.amount or _resolve_apartment_amount(booking.apartment)
 
     return {
         "id": booking.id,
+        "booking_code": booking.booking_code or f"BK{booking.id:05d}",
         "user_id": booking.user_id,
+        "pet_id": booking.pet_id,
         "name": booking.name,
         "email": booking.email,
         "mobile": booking.mobile,
@@ -395,17 +649,39 @@ def _serialize_booking(booking: Booking, db: Session) -> dict:
         "address": booking.address,
         "pet_name": pet_name,
         "pet_image": pet_image,
+        "service_type": getattr(booking, "service_type", None),
+        "booking_category": getattr(booking, "booking_category", None),
+        "plan_name": getattr(booking, "plan_name", None),
+        "booking_date": booking.booking_date.isoformat() if booking.booking_date else None,
+        "time_slot": booking.time_slot,
+        "booking_time": booking.time_slot,
+        "duration": booking.duration,
+        "payment_method": booking.payment_method,
+        "payment_status": booking.payment_status,
         "status": booking.status,
         "assigned_walker": booking.assigned_walker,
-        "created_at": booking.created_at,
-        "amount": booking.amount or _resolve_apartment_amount(booking.apartment),
+        "walker_id": booking.walker_id,
+        "amount": amount_paise,
+        "discount": getattr(booking, "discount", 0) or 0,
+        "coupon": getattr(booking, "coupon", None),
+        "cancelled_at": _as_utc(getattr(booking, "cancelled_at", None)),
+        "cancellation_reason": getattr(booking, "cancellation_reason", None),
+        "cancelled_by": getattr(booking, "cancelled_by", None),
+        "created_at": _as_utc(booking.created_at),
+        "updated_at": _as_utc(getattr(booking, "updated_at", None) or booking.created_at),
     }
+
+
+def _serialize_walker_booking(booking: Booking, db: Session) -> dict:
+    return _serialize_booking(booking, db)
 
 
 def _normalize_status(status: str | None) -> str:
     mapping = {
         "New": "PENDING",
         "Assigned": "CONFIRMED",
+        "Started": "STARTED",
+        "Reached": "REACHED",
         "Completed": "COMPLETED",
         "Cancelled": "CANCELLED",
     }
@@ -463,10 +739,23 @@ def _serialize_my_booking(booking: Booking, db: Session) -> MyBookingItem:
             notes=ff.notes,
         )
 
+    user = db.query(User).filter(User.id == booking.user_id).first() if booking.user_id else None
+    pet = _booking_pet(db, booking)
+    pet_name, pet_image = _resolve_pet_fields(booking.pet_name, booking.pet_image, user, pet)
+    pet_brief = None
+    if pet_name:
+        pet_brief = PetBrief(
+            id=booking.pet_id,
+            name=pet_name,
+            pet_image=pet_image,
+            image_url=pet_image,
+        )
+
     amount_rupees = (booking.amount or _resolve_apartment_amount(booking.apartment)) / 100
     discount = getattr(booking, "discount", 0) or 0
 
     return MyBookingItem(
+        booking_id=booking.id,
         id=booking.booking_code or f"BK{booking.id:05d}",
         service_type=getattr(booking, "service_type", None) or "Dog Walking",
         booking_category=getattr(booking, "booking_category", None) or "One-Time",
@@ -484,10 +773,17 @@ def _serialize_my_booking(booking: Booking, db: Session) -> MyBookingItem:
         address=booking.address,
         latitude=getattr(booking, "latitude", None),
         longitude=getattr(booking, "longitude", None),
-        created_at=booking.created_at,
-        updated_at=getattr(booking, "updated_at", None) or booking.created_at,
+        pet_id=booking.pet_id,
+        pet_name=pet_name,
+        pet_image=pet_image,
+        pet=pet_brief,
         walker=walker_brief,
         friend_family=friend_family,
+        cancelled_at=_as_utc(getattr(booking, "cancelled_at", None)),
+        cancellation_reason=getattr(booking, "cancellation_reason", None),
+        cancelled_by=getattr(booking, "cancelled_by", None),
+        created_at=_as_utc(booking.created_at),
+        updated_at=_as_utc(getattr(booking, "updated_at", None) or booking.created_at),
     )
 
 
@@ -531,9 +827,7 @@ def _build_customer_summaries(db: Session) -> list[CustomerSummary]:
                 pet_name = user.pet_name
                 pet_image = user.pet_image
 
-        customers.append(
-            CustomerSummary(pet_name=pet_name, pet_image=pet_image, **data)
-        )
+        customers.append(CustomerSummary(pet_name=pet_name, pet_image=pet_image, **data))
 
     customers.sort(
         key=lambda c: c.last_booking_at or datetime.min.replace(tzinfo=None),
@@ -543,10 +837,7 @@ def _build_customer_summaries(db: Session) -> list[CustomerSummary]:
 
 
 @app.get("/customers", response_model=list[CustomerSummary])
-def get_customers(
-    admin=Depends(get_current_admin),
-    db: Session = Depends(get_db),
-):
+def get_customers(admin=Depends(get_current_admin), db: Session = Depends(get_db)):
     return _build_customer_summaries(db)
 
 
@@ -583,10 +874,7 @@ def get_customer_detail(
     )
 
 
-async def _notify_booking_confirmed(
-    booking: Booking,
-    background_tasks: BackgroundTasks,
-):
+async def _notify_booking_confirmed(booking: Booking, background_tasks: BackgroundTasks):
     await manager.broadcast({
         "type": "new_booking",
         "booking_id": booking.id,
@@ -616,20 +904,50 @@ async def _notify_booking_confirmed(
 async def create_booking(
     booking_data: BookingRequest,
     user_id: str = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """Create a pending booking; confirmation happens after payment verification."""
-    print(f"Booking request from user {user_id}")
-    print(f"Booking data: {booking_data}")
-    
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.id == int(user_id)).first()
     user_email = booking_data.email or (user.email if user else None)
-    pet_name, pet_image = _resolve_pet_fields(
-        booking_data.pet_name, booking_data.pet_image, user
-    )
+
+    selected_pet = None
+    if booking_data.pet_id is not None:
+        selected_pet = (
+            db.query(Pet)
+            .filter(Pet.id == booking_data.pet_id, Pet.user_id == int(user_id))
+            .first()
+        )
+        if not selected_pet:
+            raise HTTPException(status_code=400, detail="Selected pet was not found")
+
+        pet_name = selected_pet.name
+        pet_image = selected_pet.image_url
+    else:
+        if user:
+            _ensure_user_has_legacy_pet(db, user)
+
+        pet_name, pet_image = _resolve_pet_fields(
+            booking_data.pet_name,
+            booking_data.pet_image,
+            user,
+        )
+
+        if not pet_name and user:
+            selected_pet = _get_primary_pet(db, user.id)
+            if selected_pet:
+                pet_name = selected_pet.name
+                pet_image = selected_pet.image_url
+
+        if not selected_pet and user and pet_name:
+            selected_pet = (
+                db.query(Pet)
+                .filter(Pet.user_id == user.id, func.lower(Pet.name) == pet_name.lower())
+                .order_by(Pet.id.asc())
+                .first()
+            )
 
     new_booking = Booking(
         user_id=int(user_id) if user_id else None,
+        pet_id=selected_pet.id if selected_pet else None,
         name=booking_data.name,
         email=user_email,
         mobile=booking_data.mobile,
@@ -638,13 +956,16 @@ async def create_booking(
         address=booking_data.address,
         pet_name=pet_name,
         pet_image=pet_image,
-        service_type=getattr(booking_data, "service_type", None) or "Dog Walking",
-        booking_category=getattr(booking_data, "booking_category", None) or "One-Time",
-        plan_name=getattr(booking_data, "plan_name", None) or booking_data.apartment,
-        booking_date=getattr(booking_data, "booking_date", None) or date.today(),
-        time_slot=getattr(booking_data, "time_slot", None) or "6 PM - 9 PM",
-        duration=getattr(booking_data, "duration", None) or 60,
-        payment_method=getattr(booking_data, "payment_method", None) or "Online",
+        service_type=booking_data.service_type or "Dog Walking",
+        booking_category=booking_data.booking_category or "One-Time",
+        plan_name=booking_data.plan_name or booking_data.apartment,
+        payment_method=booking_data.payment_method or "Online",
+        special_instructions=booking_data.special_instructions,
+        latitude=booking_data.latitude,
+        longitude=booking_data.longitude,
+        booking_date=booking_data.booking_date if booking_data.booking_date is not None else date.today(),
+        time_slot=booking_data.time_slot if booking_data.time_slot is not None else "6 PM - 9 PM",
+        duration=booking_data.duration if booking_data.duration is not None else 60,
         status="New",
         assigned_walker=None,
         payment_status="pending",
@@ -658,15 +979,16 @@ async def create_booking(
     db.commit()
     db.refresh(new_booking)
 
-    print(f"Booking {new_booking.id} created")
-    
     return {
         "id": new_booking.id,
         "name": new_booking.name,
         "email": new_booking.email,
         "apartment": new_booking.apartment,
-        "created_at": new_booking.created_at.isoformat()
+        "pet_id": new_booking.pet_id,
+        "created_at": new_booking.created_at.isoformat(),
     }
+
+
 @app.get("/bookings")
 def get_bookings(
     page: int = 1,
@@ -675,11 +997,7 @@ def get_bookings(
     db: Session = Depends(get_db),
 ):
     offset = (page - 1) * limit
-
-    query = db.query(Booking).filter(
-        _paid_booking_filter()
-    )
-
+    query = db.query(Booking).filter(_paid_booking_filter())
     total = query.count()
 
     bookings = (
@@ -694,57 +1012,41 @@ def get_bookings(
         "page": page,
         "limit": limit,
         "total_pages": (total + limit - 1) // limit,
-        "bookings": [_serialize_booking(b, db) for b in bookings]
+        "bookings": [_serialize_booking(b, db) for b in bookings],
     }
-    
+
+
 @app.get("/bookings/{booking_id}")
 def get_booking(
     booking_id: int,
     admin=Depends(get_current_admin),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    booking = db.query(Booking).filter(
-        Booking.id == booking_id
-    ).first()
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
 
     if not booking:
-        raise HTTPException(
-            status_code=404,
-            detail="Booking not found"
-        )
+        raise HTTPException(status_code=404, detail="Booking not found")
 
     if booking.payment_status not in ("paid", None):
-        raise HTTPException(
-            status_code=404,
-            detail="Booking not found"
-        )
+        raise HTTPException(status_code=404, detail="Booking not found")
 
     return _serialize_booking(booking, db)
+
 
 @app.patch("/bookings/{booking_id}")
 async def update_booking(
     booking_id: int,
     update: BookingUpdate,
     admin=Depends(get_current_admin),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    booking = db.query(Booking).filter(
-        Booking.id == booking_id
-    ).first()
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
 
     if not booking:
-        raise HTTPException(
-            status_code=404,
-            detail="Booking not found"
-        )
+        raise HTTPException(status_code=404, detail="Booking not found")
 
     if booking.payment_status not in ("paid", None):
-        raise HTTPException(
-            status_code=404,
-            detail="Booking not found"
-        )
-
-    previous_walker = booking.assigned_walker
+        raise HTTPException(status_code=404, detail="Booking not found")
 
     if update.status == "Assigned":
         walker = None
@@ -759,20 +1061,26 @@ async def update_booking(
                 detail="Select a walker to assign this booking",
             )
 
-        busy = _busy_walker_names(db, exclude_booking_id=booking_id)
-        if walker.name in busy:
+        existing_active = db.query(Booking).filter(
+            Booking.walker_id == walker.id,
+            Booking.id != booking.id,
+            Booking.status.notin_(list(TERMINAL_BOOKING_STATUSES)),
+        ).first()
+        if existing_active:
+            raise HTTPException(status_code=400, detail="Walker already has an active booking")
+
+        busy_ids = _busy_walker_ids(db, exclude_booking_id=booking_id)
+        if walker.id in busy_ids:
             raise HTTPException(
                 status_code=400,
                 detail="Walker is already assigned to another active booking",
             )
-        if not walker.is_available:
-            raise HTTPException(
-                status_code=400,
-                detail="Walker is not available",
-            )
 
-        if previous_walker and previous_walker != walker.name:
-            _set_walker_availability(db, previous_walker, True)
+        previous_walker_id = booking.walker_id
+        if previous_walker_id and previous_walker_id != walker.id:
+            prev = db.query(Walker).filter(Walker.id == previous_walker_id).first()
+            if prev:
+                prev.is_available = True
 
         booking.assigned_walker = walker.name
         booking.walker_id = walker.id
@@ -781,24 +1089,68 @@ async def update_booking(
     booking.status = update.status
 
     if update.status in ("Completed", "Cancelled"):
-        _set_walker_availability(db, booking.assigned_walker, True)
+        _release_booking_walker(db, booking)
 
     db.commit()
     db.refresh(booking)
 
-    
     await manager.broadcast({
         "type": "status_updated",
         "booking_id": booking.id,
         "status": booking.status,
-        "assigned_walker": booking.assigned_walker
+        "assigned_walker": booking.assigned_walker,
     })
-
 
     return _serialize_booking(booking, db)
 
 
-# ===== RAZORPAY PAYMENT ENDPOINTS =====
+@app.post("/bookings/{booking_id}/cancel", response_model=BookingCancelResponse)
+async def cancel_booking(
+    booking_id: int,
+    body: BookingCancelRequest = BookingCancelRequest(),
+    actor: dict = Depends(get_authenticated_actor),
+    db: Session = Depends(get_db),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    is_admin = actor.get("role") == "admin"
+    if not is_admin:
+        if booking.user_id is None or booking.user_id != int(actor["id"]):
+            raise HTTPException(status_code=403, detail="Not authorized to cancel this booking")
+
+    if booking.status == "Completed":
+        raise HTTPException(status_code=409, detail="Completed bookings cannot be cancelled")
+
+    if booking.status == "Cancelled":
+        await _broadcast_booking_status_updated(booking)
+        return _booking_cancel_response(booking, "Booking was already cancelled")
+
+    reason = body.reason.strip() if (body and body.reason) else None
+    if not reason:
+        raise HTTPException(status_code=400, detail="Please provide a cancellation reason.")
+
+    cancelled_by = body.cancelled_by.strip() if (body and body.cancelled_by) else None
+    if not cancelled_by:
+        cancelled_by = "admin" if is_admin else "customer"
+
+    try:
+        booking.status = "Cancelled"
+        booking.cancelled_at = datetime.utcnow()
+        booking.cancellation_reason = reason
+        booking.cancelled_by = cancelled_by
+        _release_booking_walker(db, booking)
+        db.commit()
+        db.refresh(booking)
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Failed to cancel booking %s", booking_id)
+        raise HTTPException(status_code=500, detail="Could not cancel booking. Please try again.")
+
+    await _broadcast_booking_status_updated(booking)
+    return _booking_cancel_response(booking, "Booking cancelled successfully")
+
 
 @app.post("/create-order", response_model=CreateOrderResponse)
 def create_order(
@@ -814,22 +1166,18 @@ def create_order(
     if booking.payment_status == "paid":
         raise HTTPException(status_code=400, detail="Booking is already paid")
 
-    # ===== MODIFY create_order — change the amount source ONLY =====
     client = _get_razorpay_client()
     order_amount = getattr(booking, "amount", None) or _resolve_apartment_amount(booking.apartment)
     try:
         order = client.order.create({
-            "amount": order_amount,          # was BOOKING_AMOUNT_PAISE
+            "amount": order_amount,
             "currency": "INR",
             "receipt": f"booking_{booking.id}",
             "notes": {"booking_id": str(booking.id)},
         })
     except Exception:
         logger.exception("Razorpay order creation failed for booking %s", booking.id)
-        raise HTTPException(
-            status_code=502,
-            detail="Could not create payment order. Please try again.",
-        )
+        raise HTTPException(status_code=502, detail="Could not create payment order. Please try again.")
 
     booking.razorpay_order_id = order["id"]
     db.commit()
@@ -892,54 +1240,48 @@ async def verify_payment(
 @app.websocket("/ws/bookings")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
-
     try:
         while True:
             await asyncio.sleep(30)
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
+
 @app.get("/pages/{slug}")
 def get_page(slug: str):
     return {
         "title": slug.replace("-", " ").title(),
-        "file_url": f"/policies/{slug}.html"
+        "file_url": f"/policies/{slug}.html",
     }
 
 
-# ===== ADD new endpoints (additive — no existing endpoint touched) =====
-
-# ----- Apartment pricing -----
 @app.get("/apartment-price", response_model=ApartmentPriceResponse)
-def get_apartment_price(
-    apartment: str,
-    user_id: str = Depends(get_current_user),
-):
+def get_apartment_price(apartment: str, user_id: str = Depends(get_current_user)):
     if apartment not in APARTMENT_PRICES:
         raise HTTPException(status_code=404, detail="Unknown apartment")
-    return ApartmentPriceResponse(
-        amount=APARTMENT_PRICES[apartment],
-        apartment=apartment,
-    )
+    return ApartmentPriceResponse(amount=APARTMENT_PRICES[apartment], apartment=apartment)
 
 
-# ----- Profile -----
 @app.get("/profile", response_model=ProfileResponse)
 def get_profile(
     user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.id == int(user_id)).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    user = _get_user_or_404(db, user_id)
 
-    # Prefer Pet table values if present, fall back to User fields
-    pet = db.query(Pet).filter(Pet.user_id == user.id).order_by(Pet.id.desc()).first()
-    pet_name = pet.name if pet and pet.name else user.pet_name
-    pet_image = pet.image_url if pet and pet.image_url else user.pet_image
+    created_pet = _ensure_user_has_legacy_pet(db, user)
+    if created_pet:
+        _sync_user_primary_pet_from_pets(db, user)
+        db.commit()
+        db.refresh(user)
+
+    primary_pet = _get_primary_pet(db, user.id)
+    pet_name = primary_pet.name if primary_pet else user.pet_name
+    pet_image = primary_pet.image_url if primary_pet else user.pet_image
 
     return ProfileResponse(
         id=user.id,
+        owner_id=user.owner_id,
         name=user.name,
         email=user.email,
         mobile=user.mobile,
@@ -957,42 +1299,39 @@ def update_profile(
     user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.id == int(user_id)).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
+    user = _get_user_or_404(db, user_id)
     data = update.model_dump(exclude_unset=True)
 
-    # Email uniqueness check if changed
     new_email = data.get("email")
     if new_email and new_email != user.email:
         clash = db.query(User).filter(User.email == new_email, User.id != user.id).first()
         if clash:
             raise HTTPException(status_code=400, detail="Email already registered")
 
-    # Update plain user fields
     for field in ("name", "email", "mobile", "apartment", "flatNo", "address"):
         if field in data and data[field] is not None:
             setattr(user, field, data[field])
 
-    # Sync pet fields across User + Pet tables
-    pet_name = data.get("pet_name")
-    pet_image = data.get("pet_image")
-    if pet_name is not None or pet_image is not None:
-        if pet_name is not None:
-            user.pet_name = pet_name
-        if pet_image is not None:
-            user.pet_image = pet_image
+    pet_fields_present = "pet_name" in data or "pet_image" in data
+    if pet_fields_present:
+        if "pet_name" in data and data["pet_name"] is not None:
+            user.pet_name = data["pet_name"]
+        if "pet_image" in data:
+            user.pet_image = data["pet_image"]
 
-        pet = db.query(Pet).filter(Pet.user_id == user.id).order_by(Pet.id.desc()).first()
+        pet = _get_primary_pet(db, user.id)
         if not pet:
-            pet = Pet(user_id=user.id, name=user.pet_name, image_url=user.pet_image)
+            pet = Pet(
+                user_id=user.id,
+                name=(user.pet_name or "My Pet").strip() or "My Pet",
+                image_url=user.pet_image,
+            )
             db.add(pet)
         else:
-            if pet_name is not None:
-                pet.name = pet_name
-            if pet_image is not None:
-                pet.image_url = pet_image
+            if "pet_name" in data and data["pet_name"] is not None:
+                pet.name = data["pet_name"]
+            if "pet_image" in data:
+                pet.image_url = data["pet_image"]
 
     try:
         db.commit()
@@ -1002,18 +1341,139 @@ def update_profile(
         logger.exception("Profile update failed for user %s", user_id)
         raise HTTPException(status_code=500, detail="Could not update profile")
 
-    pet = db.query(Pet).filter(Pet.user_id == user.id).order_by(Pet.id.desc()).first()
+    primary_pet = _get_primary_pet(db, user.id)
     return ProfileResponse(
         id=user.id,
+        owner_id=user.owner_id,
         name=user.name,
         email=user.email,
         mobile=user.mobile,
         apartment=user.apartment,
         flatNo=user.flatNo,
         address=user.address,
-        pet_name=(pet.name if pet and pet.name else user.pet_name),
-        pet_image=(pet.image_url if pet and pet.image_url else user.pet_image),
+        pet_name=(primary_pet.name if primary_pet else user.pet_name),
+        pet_image=(primary_pet.image_url if primary_pet else user.pet_image),
     )
+
+
+@app.get("/pets", response_model=list[PetResponse])
+def get_my_pets(
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = _get_user_or_404(db, user_id)
+    created_pet = _ensure_user_has_legacy_pet(db, user)
+
+    if created_pet:
+        _sync_user_primary_pet_from_pets(db, user)
+        db.commit()
+
+    pets = (
+        db.query(Pet)
+        .filter(Pet.user_id == user.id)
+        .order_by(Pet.id.asc())
+        .all()
+    )
+    return [_serialize_pet(p) for p in pets]
+
+
+@app.post("/pets", response_model=PetResponse, status_code=status.HTTP_201_CREATED)
+def create_pet(
+    data: PetCreate,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = _get_user_or_404(db, user_id)
+    name = data.name.strip()
+
+    if len(name) < 2:
+        raise HTTPException(status_code=400, detail="Pet name must be at least 2 characters")
+
+    pet = Pet(
+        user_id=user.id,
+        name=name,
+        image_url=data.resolved_image(),
+    )
+
+    try:
+        db.add(pet)
+        db.flush()
+        _sync_user_primary_pet_from_pets(db, user)
+        db.commit()
+        db.refresh(pet)
+        return _serialize_pet(pet)
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Could not create pet for user %s", user_id)
+        raise HTTPException(status_code=500, detail="Could not create pet")
+
+
+@app.patch("/pets/{pet_id}", response_model=PetResponse)
+def update_pet(
+    pet_id: int,
+    data: PetUpdate,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = _get_user_or_404(db, user_id)
+    pet = db.query(Pet).filter(Pet.id == pet_id, Pet.user_id == user.id).first()
+
+    if not pet:
+        raise HTTPException(status_code=404, detail="Pet not found")
+
+    payload = data.model_dump(exclude_unset=True)
+
+    if "name" in payload and payload["name"] is not None:
+        name = payload["name"].strip()
+        if len(name) < 2:
+            raise HTTPException(status_code=400, detail="Pet name must be at least 2 characters")
+        pet.name = name
+
+    if "pet_image" in payload:
+        pet.image_url = payload["pet_image"]
+    elif "image_url" in payload:
+        pet.image_url = payload["image_url"]
+
+    try:
+        db.add(pet)
+        db.flush()
+        _sync_user_primary_pet_from_pets(db, user)
+        db.commit()
+        db.refresh(pet)
+        return _serialize_pet(pet)
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Could not update pet %s for user %s", pet_id, user_id)
+        raise HTTPException(status_code=500, detail="Could not update pet")
+
+
+@app.delete("/pets/{pet_id}")
+def delete_pet(
+    pet_id: int,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = _get_user_or_404(db, user_id)
+    pet = db.query(Pet).filter(Pet.id == pet_id, Pet.user_id == user.id).first()
+
+    if not pet:
+        raise HTTPException(status_code=404, detail="Pet not found")
+
+    try:
+        db.query(Booking).filter(Booking.pet_id == pet.id).update(
+            {Booking.pet_id: None},
+            synchronize_session=False,
+        )
+        db.delete(pet)
+        db.flush()
+        _sync_user_primary_pet_from_pets(db, user)
+        db.commit()
+        return {"message": "Pet deleted successfully"}
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Could not delete pet %s for user %s", pet_id, user_id)
+        raise HTTPException(status_code=500, detail="Could not delete pet")
+
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
@@ -1032,20 +1492,18 @@ def update_user(
     current_user_id: str = Depends(get_current_user),
 ):
     if str(current_user_id) != str(user_id):
-        raise HTTPException(
-            status_code=403,
-            detail="You can only update your own profile"
-        )
+        raise HTTPException(status_code=403, detail="You can only update your own profile")
 
     user = db.query(User).filter(User.id == user_id).first()
-
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
-        )
+        raise HTTPException(status_code=404, detail="User not found")
 
-    data = payload.dict(exclude_unset=True)
+    data = payload.model_dump(exclude_unset=True)
+
+    if "email" in data and data["email"] != user.email:
+        clash = db.query(User).filter(User.email == data["email"], User.id != user.id).first()
+        if clash:
+            raise HTTPException(status_code=400, detail="Email already registered")
 
     for field, value in data.items():
         setattr(user, field, value)
@@ -1063,27 +1521,16 @@ def update_user(
         "address": user.address,
     }
 
-    # ===== DASHBOARD REVENUE APIs =====
 
 @app.get("/api/dashboard/revenue")
-def dashboard_revenue(
-    admin=Depends(get_current_admin),
-    db: Session = Depends(get_db),
-):
-    bookings = db.query(Booking).filter(
-        Booking.payment_status == "paid"
-    ).all()
-
+def dashboard_revenue(admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    bookings = db.query(Booking).filter(Booking.payment_status == "paid").all()
     total = 0
-
     for booking in bookings:
         if getattr(booking, "amount", None):
             total += booking.amount
 
-    return {
-        "total_revenue": round(total / 100, 2),
-        "currency": "INR"
-    }
+    return {"total_revenue": round(total / 100, 2), "currency": "INR"}
 
 
 @app.get("/api/dashboard/revenue-daily")
@@ -1093,72 +1540,47 @@ def dashboard_revenue_daily(
     db: Session = Depends(get_db),
 ):
     today = date.today()
-
     revenue_map = {}
 
     for i in range(days):
         d = today - timedelta(days=i)
         revenue_map[d.isoformat()] = 0
 
-    bookings = db.query(Booking).filter(
-        Booking.payment_status == "paid"
-    ).all()
+    bookings = db.query(Booking).filter(Booking.payment_status == "paid").all()
 
     for booking in bookings:
         if not booking.created_at:
             continue
-
         day = booking.created_at.date().isoformat()
-
         if day in revenue_map:
-            revenue_map[day] += (
-                getattr(booking, "amount", 0) or 0
-            ) / 100
+            revenue_map[day] += (getattr(booking, "amount", 0) or 0) / 100
 
-    return [
-        {
-            "date": day,
-            "revenue": revenue_map[day]
-        }
-        for day in sorted(revenue_map.keys())
-    ]
+    return [{"date": day, "revenue": revenue_map[day]} for day in sorted(revenue_map.keys())]
+
 
 @app.get("/api/dashboard/stats")
-def dashboard_stats(
-    admin=Depends(get_current_admin),
-    db: Session = Depends(get_db),
-):
-    paid_bookings = db.query(Booking).filter(
-        Booking.payment_status == "paid"
-    ).all()
+def dashboard_stats(admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    paid_bookings = db.query(Booking).filter(Booking.payment_status == "paid").all()
 
     total_bookings = len(paid_bookings)
     total_revenue = sum(b.amount or _resolve_apartment_amount(b.apartment) for b in paid_bookings) / 100
 
     new_bookings = [b for b in paid_bookings if b.status == "New"]
-    new_bookings_count = len(new_bookings)
-    new_bookings_revenue = sum(b.amount or _resolve_apartment_amount(b.apartment) for b in new_bookings) / 100
-
     assigned_bookings = [b for b in paid_bookings if b.status == "Assigned"]
-    assigned_bookings_count = len(assigned_bookings)
-    assigned_bookings_revenue = sum(b.amount or _resolve_apartment_amount(b.apartment) for b in assigned_bookings) / 100
-
     completed_bookings = [b for b in paid_bookings if b.status == "Completed"]
-    completed_bookings_count = len(completed_bookings)
-    completed_bookings_revenue = sum(b.amount or _resolve_apartment_amount(b.apartment) for b in completed_bookings) / 100
 
     return {
         "total_bookings": total_bookings,
         "total_revenue": total_revenue,
-        "new_bookings": new_bookings_count,
-        "new_revenue": new_bookings_revenue,
-        "assigned_bookings": assigned_bookings_count,
-        "assigned_revenue": assigned_bookings_revenue,
-        "completed_bookings": completed_bookings_count,
-        "completed_revenue": completed_bookings_revenue,
+        "new_bookings": len(new_bookings),
+        "new_revenue": sum(b.amount or _resolve_apartment_amount(b.apartment) for b in new_bookings) / 100,
+        "assigned_bookings": len(assigned_bookings),
+        "assigned_revenue": sum(b.amount or _resolve_apartment_amount(b.apartment) for b in assigned_bookings) / 100,
+        "completed_bookings": len(completed_bookings),
+        "completed_revenue": sum(b.amount or _resolve_apartment_amount(b.apartment) for b in completed_bookings) / 100,
     }
-       
-# ----- Booking history (current user only) -----
+
+
 def _booking_amount(booking: Booking) -> int:
     if getattr(booking, "amount", None):
         return booking.amount
@@ -1185,6 +1607,7 @@ def get_booking_history(
             assigned_walker=b.assigned_walker,
             amount=_booking_amount(b),
             apartment=b.apartment,
+            pet_id=b.pet_id,
         )
         for b in bookings
     ]
@@ -1202,6 +1625,10 @@ def get_booking_history_detail(
     if booking.user_id != int(user_id):
         raise HTTPException(status_code=403, detail="Not authorized for this booking")
 
+    user = db.query(User).filter(User.id == booking.user_id).first() if booking.user_id else None
+    pet = _booking_pet(db, booking)
+    pet_name, pet_image = _resolve_pet_fields(booking.pet_name, booking.pet_image, user, pet)
+
     return BookingHistoryDetail(
         id=booking.id,
         created_at=booking.created_at,
@@ -1210,13 +1637,14 @@ def get_booking_history_detail(
         assigned_walker=booking.assigned_walker,
         amount=_booking_amount(booking),
         apartment=booking.apartment,
+        pet_id=booking.pet_id,
         name=booking.name,
         email=booking.email,
         mobile=booking.mobile,
         flatNo=booking.flatNo,
         address=booking.address,
-        pet_name=booking.pet_name,
-        pet_image=booking.pet_image,
+        pet_name=pet_name,
+        pet_image=pet_image,
     )
 
 
@@ -1225,7 +1653,6 @@ def get_my_bookings(
     user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Return all bookings for the authenticated user with full detail."""
     bookings = (
         db.query(Booking)
         .filter(Booking.user_id == int(user_id))
@@ -1235,12 +1662,363 @@ def get_my_bookings(
     return [_serialize_my_booking(b, db) for b in bookings]
 
 
-# ----- Logout (stateless) -----
 @app.post("/logout")
 def logout_endpoint(user_id: str = Depends(get_current_user)):
     return {"message": "logged out"}
 
+
+@app.post("/walker/login", tags=["Walker"])
+def walker_login(data: WalkerLogin, db: Session = Depends(get_db)):
+    walker = db.query(Walker).filter(Walker.email == data.email.strip().lower()).first()
+    if not walker or not verify_password(data.password, walker.hashed_password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+    if not walker.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="account deactivated")
+
+    access_token = create_access_token(data={"sub": str(walker.id), "role": "walker"})
+    profile = WalkerProfileOut.model_validate(walker)
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "walker": profile,
+    }
+
+
+@app.post("/walker/logout", tags=["Walker"])
+def walker_logout(current_walker=Depends(get_current_walker)):
+    return {"message": "logged out"}
+
+
+@app.get("/walker/profile", response_model=WalkerProfileOut, tags=["Walker"])
+def get_walker_profile(current_walker=Depends(get_current_walker)):
+    return current_walker
+
+
+@app.put("/walker/profile", response_model=WalkerProfileOut, tags=["Walker"])
+def update_walker_profile(
+    body: WalkerProfileUpdate,
+    current_walker=Depends(get_current_walker),
+    db: Session = Depends(get_db),
+):
+    try:
+        if body.name is not None:
+            current_walker.name = body.name.strip()
+        if body.mobile_number is not None:
+            current_walker.mobile_number = body.mobile_number.strip()
+            current_walker.mobile = body.mobile_number.strip()
+        if body.address is not None:
+            current_walker.address = body.address.strip()
+        if body.profile_image is not None:
+            current_walker.profile_image = body.profile_image.strip()
+
+        db.add(current_walker)
+        db.commit()
+        db.refresh(current_walker)
+        return current_walker
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Database error updating walker profile")
+        raise HTTPException(status_code=500, detail="Could not update profile. Please try again.")
+
+
+@app.patch("/walker/profile", response_model=WalkerProfileOut, tags=["Walker"])
+def patch_walker_profile(
+    body: WalkerProfileUpdate,
+    current_walker=Depends(get_current_walker),
+    db: Session = Depends(get_db),
+):
+    try:
+        if body.name is not None:
+            current_walker.name = body.name.strip()
+        if body.mobile_number is not None:
+            current_walker.mobile_number = body.mobile_number.strip()
+            current_walker.mobile = body.mobile_number.strip()
+        if body.address is not None:
+            current_walker.address = body.address.strip()
+        if body.profile_image is not None:
+            current_walker.profile_image = body.profile_image.strip()
+
+        db.add(current_walker)
+        db.commit()
+        db.refresh(current_walker)
+        return current_walker
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Database error updating walker profile")
+        raise HTTPException(status_code=500, detail="Could not update profile")
+
+
+@app.put("/walker/change-password", tags=["Walker"])
+def change_walker_password(
+    body: WalkerPasswordChange,
+    current_walker=Depends(get_current_walker),
+    db: Session = Depends(get_db),
+):
+    if not verify_password(body.current_password, current_walker.hashed_password):
+        raise HTTPException(status_code=400, detail="Invalid current password")
+
+    try:
+        current_walker.hashed_password = hash_password(body.new_password)
+        db.add(current_walker)
+        db.commit()
+        return {"message": "Password changed successfully"}
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Database error changing walker password")
+        raise HTTPException(status_code=500, detail="Could not change password. Please try again.")
+
+
+@app.patch("/walker/change-password", tags=["Walker"])
+def patch_walker_password(
+    body: WalkerPasswordChange,
+    current_walker=Depends(get_current_walker),
+    db: Session = Depends(get_db),
+):
+    old_pw = body.resolved_old_password()
+    if not verify_password(old_pw, current_walker.hashed_password):
+        raise HTTPException(status_code=400, detail="Invalid old password")
+
+    try:
+        current_walker.hashed_password = hash_password(body.new_password)
+        db.add(current_walker)
+        db.commit()
+        return {"message": "Password changed successfully"}
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Database error changing walker password")
+        raise HTTPException(status_code=500, detail="Could not change password")
+
+
+@app.put("/walker/availability", response_model=WalkerProfileOut, tags=["Walker"])
+def toggle_walker_availability(
+    body: WalkerAvailabilityUpdate,
+    current_walker=Depends(get_current_walker),
+    db: Session = Depends(get_db),
+):
+    try:
+        current_walker.is_available = body.is_available
+        db.add(current_walker)
+        db.commit()
+        db.refresh(current_walker)
+        return current_walker
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Database error changing walker availability")
+        raise HTTPException(status_code=500, detail="Could not update availability.")
+
+
+@app.get("/walker/dashboard", tags=["Walker"])
+def walker_dashboard(current_walker=Depends(get_current_walker), db: Session = Depends(get_db)):
+    today = date.today()
+
+    todays_bookings = db.query(Booking).filter(
+        Booking.walker_id == current_walker.id,
+        Booking.booking_date == today,
+    )
+
+    total_today = todays_bookings.count()
+
+    completed_today = db.query(Booking).filter(
+        Booking.walker_id == current_walker.id,
+        Booking.status == "Completed",
+        func.date(Booking.updated_at) == today,
+    ).count()
+
+    pending = db.query(Booking).filter(
+        Booking.walker_id == current_walker.id,
+        Booking.status.in_(list(ACTIVE_BOOKING_STATUSES)),
+    ).count()
+
+    return {
+        "today_total": total_today,
+        "completed_today": completed_today,
+        "pending": pending,
+        "is_available": bool(current_walker.is_available),
+        "rating": 0.0,
+    }
+
+
+@app.get("/walker/bookings", tags=["Walker"])
+def get_walker_bookings(
+    page: int = 1,
+    limit: int = 10,
+    current_walker=Depends(get_current_walker),
+    db: Session = Depends(get_db),
+):
+    offset = (page - 1) * limit
+    query = db.query(Booking).filter(Booking.walker_id == current_walker.id)
+    total = query.count()
+    bookings = (
+        query.order_by(Booking.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "total_pages": (total + limit - 1) // limit,
+        "bookings": [_serialize_walker_booking(b, db) for b in bookings],
+    }
+
+
+@app.get("/walker/bookings/{booking_id}", tags=["Walker"])
+def get_walker_booking_detail(
+    booking_id: int,
+    current_walker=Depends(get_current_walker),
+    db: Session = Depends(get_db),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.walker_id != current_walker.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this booking")
+    return _serialize_walker_booking(booking, db)
+
+
+@app.put("/walker/bookings/{booking_id}/status", tags=["Walker"])
+async def update_walker_booking_status(
+    booking_id: int,
+    body: BookingStatusUpdate,
+    current_walker=Depends(get_current_walker),
+    db: Session = Depends(get_db),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.walker_id != current_walker.id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this booking")
+
+    current_status = booking.status
+    target_status = body.status
+
+    if target_status == "Cancelled":
+        raise HTTPException(status_code=400, detail="Walkers cannot cancel bookings.")
+
+    if current_status == target_status:
+        return _serialize_booking(booking, db)
+
+    valid = False
+    valid_next = ""
+    if current_status == "Assigned" and target_status == "Started":
+        valid = True
+    elif current_status == "Started" and target_status == "Reached":
+        valid = True
+    elif current_status == "Reached" and target_status == "Completed":
+        valid = True
+
+    if not valid:
+        if current_status == "Assigned":
+            valid_next = "Started"
+        elif current_status == "Started":
+            valid_next = "Reached"
+        elif current_status == "Reached":
+            valid_next = "Completed"
+        else:
+            valid_next = "None (booking is already completed or cancelled)"
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid transition from {current_status} to {target_status}. Valid next state(s): {valid_next}",
+        )
+
+    try:
+        booking.status = target_status
+        if target_status == "Completed":
+            _release_booking_walker(db, booking)
+
+        db.add(booking)
+        db.commit()
+        db.refresh(booking)
+
+        await manager.broadcast({
+            "type": "status_updated",
+            "booking_id": booking.id,
+            "status": booking.status,
+            "assigned_walker": booking.assigned_walker,
+        })
+        await manager.broadcast({
+            "type": "booking:status_updated",
+            "booking_id": booking.id,
+            "status": booking.status,
+            "cancelled_at": None,
+            "cancellation_reason": None,
+        })
+
+        return _serialize_booking(booking, db)
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Database error updating booking status")
+        raise HTTPException(status_code=500, detail="Could not update status. Please try again.")
+
+
+@app.patch("/walker/bookings/{booking_id}", tags=["Walker"])
+async def patch_walker_booking_status(
+    booking_id: int,
+    body: BookingStatusUpdate,
+    current_walker=Depends(get_current_walker),
+    db: Session = Depends(get_db),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.walker_id != current_walker.id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this booking")
+
+    current_status = booking.status
+    target_status = body.status
+
+    if target_status == "Cancelled":
+        raise HTTPException(status_code=400, detail="Walkers cannot cancel bookings.")
+
+    if current_status == target_status:
+        return _serialize_booking(booking, db)
+
+    allowed = {
+        "Assigned": "Started",
+        "Started": "Reached",
+        "Reached": "Completed",
+    }
+    if current_status not in allowed or allowed[current_status] != target_status:
+        valid_next = allowed.get(current_status, "None")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid transition from {current_status} to {target_status}. Valid next state(s): {valid_next}",
+        )
+
+    try:
+        booking.status = target_status
+        if target_status == "Completed":
+            _release_booking_walker(db, booking)
+
+        db.add(booking)
+        db.commit()
+        db.refresh(booking)
+
+        await manager.broadcast({
+            "type": "status_updated",
+            "booking_id": booking.id,
+            "status": booking.status,
+            "assigned_walker": booking.assigned_walker,
+        })
+        await manager.broadcast({
+            "type": "booking:status_updated",
+            "booking_id": booking.id,
+            "status": booking.status,
+            "cancelled_at": None,
+            "cancellation_reason": None,
+            "cancelled_by": None,
+        })
+
+        return _serialize_booking(booking, db)
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Database error updating booking status")
+        raise HTTPException(status_code=500, detail="Could not update status. Please try again.")
+
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
 
+    uvicorn.run(app, host="0.0.0.0", port=8000)

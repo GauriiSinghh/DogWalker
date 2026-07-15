@@ -1,0 +1,257 @@
+.walkers {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.walkers__top {
+  display: grid;
+  grid-template-columns: 1fr 160px 160px;
+  gap: 12px;
+  align-items: end;
+}
+
+.walkers__label {
+  font-size: 12px;
+  opacity: 0.8;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.walkers__input {
+  width: 100%;
+  height: 46px;
+  border-radius: 12px;
+  border: 1px solid #d1d5db;
+  padding: 0 14px;
+  outline: none;
+  background: #ffffff;
+  transition: 0.2s;
+}
+
+.walkers__input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.walkers__countValue {
+  font-size: 20px;
+  font-weight: 700;
+  padding: 8px 0;
+}
+
+.walkers__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.walkers__btn {
+  height: 40px;
+  border-radius: 10px;
+  padding: 0 12px;
+  border: 1px solid rgba(120, 120, 120, 0.25);
+  background: white;
+  cursor: pointer;
+}
+
+.walkers__btn--primary {
+  background: #2563eb;
+  border: none;
+  color: white;
+  font-weight: 600;
+}
+
+.walkers__btn--primary:hover {
+  background: #1d4ed8;
+}
+
+.walkers__btn--ghost {
+  background: transparent;
+}
+
+ .walkers__form{
+    background:#fff;
+    border:none;
+    border-radius:18px;
+    padding:22px;
+    box-shadow:0 8px 25px rgba(0,0,0,.08);
+}
+
+.walkers__formHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.walkers__formTitle {
+  margin: 0;
+}
+
+.walkers__formError {
+  margin-top: 6px;
+  color: #b91c1c;
+  font-size: 13px;
+}
+
+.walkers__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.walkers__gridSpan2 {
+  grid-column: span 2;
+}
+
+.walkers__error {
+  color: #b91c1c;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.walkers__formButtons {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.walkers__tableWrap {
+  overflow: auto;
+  border-radius: 18px;
+  border:none;
+  background: #fff;
+  box-shadow: 0 10px 35px rgba(0,0,0, .08);
+}
+
+.walkers__table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 980px;
+  background: #ffffff;
+}
+
+.walkers__table thead{
+    background:#f8fafc;
+}
+
+.walkers__table th{
+    color:#111827;
+    font-weight:700;
+    font-size:15px;
+    letter-spacing:.3px;
+}
+
+.walkers__table th,
+.walkers__table td {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid rgba(120, 120, 120, 0.12);
+  vertical-align: middle;
+  font-size: 14px;
+  color: #374151;
+}
+.walkers__table tbody tr {
+
+  transition: .25s;
+
+}
+
+.walkers__table tbody tr:hover {
+
+  background: #f9fafb;
+
+}
+
+.walkers__muted {
+  opacity: 0.7;
+}
+
+.walkers__strong {
+  font-weight: 700;
+}
+
+.walkers__truncate {
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.walkers__rowActions {
+  display: flex;
+  gap: 10px;
+}
+
+.walkers__link{
+    color:#2563eb;
+    font-weight:600;
+}
+
+.walkers__link:hover{
+    text-decoration:underline;
+}
+
+.walkers__link--danger{
+    color:#dc2626;
+}
+
+.walkers__link--danger {
+  color: #dc2626;
+}
+
+.walkers__avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(17, 24, 39, 0.06);
+  display: grid;
+  place-items: center;
+}
+
+.walkers__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.walkers__avatarFallback {
+  font-weight: 800;
+  opacity: 0.7;
+}
+
+/* Shared badge */
+.zu-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.zu-badge--green { background: rgba(34, 197, 94, 0.12); color: #166534; border-color: rgba(34, 197, 94, 0.25); }
+.zu-badge--orange { background: rgba(245, 158, 11, 0.14); color: #92400e; border-color: rgba(245, 158, 11, 0.25); }
+.zu-badge--blue { background: rgba(59, 130, 246, 0.14); color: #1e3a8a; border-color: rgba(59, 130, 246, 0.25); }
+.zu-badge--purple { background: rgba(168, 85, 247, 0.14); color: #5b21b6; border-color: rgba(168, 85, 247, 0.25); }
+.zu-badge--gray { background: rgba(107, 114, 128, 0.14); color: #374151; border-color: rgba(107, 114, 128, 0.25); }
+
+@media (max-width: 900px) {
+  .walkers__top {
+    grid-template-columns: 1fr;
+  }
+  .walkers__actions {
+    justify-content: flex-start;
+  }
+  .walkers__grid {
+    grid-template-columns: 1fr;
+  }
+  .walkers__gridSpan2 {
+    grid-column: span 1;
+  }
+}

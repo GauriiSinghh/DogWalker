@@ -6,6 +6,11 @@ const STATUS_CLASSES = {
   Pending: "admin-status-badge--pending",
   Confirmed: "admin-status-badge--confirmed",
   Active: "admin-status-badge--active",
+  Available: "admin-status-badge--completed",
+  Busy: "admin-status-badge--active",
+  Offline: "admin-status-badge--cancelled",
+  Started: "admin-status-badge--active",
+  Reached: "admin-status-badge--active",
 };
 
 const STATUS_LABELS = {
@@ -13,6 +18,11 @@ const STATUS_LABELS = {
   Assigned: "Assigned",
   Completed: "Completed",
   Cancelled: "Cancelled",
+  Available: "Available",
+  Busy: "Busy",
+  Offline: "Offline",
+  Started: "Started",
+  Reached: "Reached",
 };
 
 export default function StatusBadge({ status, compact = false, inModal = false }) {

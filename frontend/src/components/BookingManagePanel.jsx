@@ -5,7 +5,9 @@ import { FiX } from "react-icons/fi";
 import StatusBadge from "./StatusBadge";
 import ImageLightbox from "./ImageLightbox";
 import { useAdminTheme } from "../hooks/useAdminTheme";
-import { getWalkers } from "../services/adminApi";
+import { getWalkers, cancelBookingAdmin } from "../services/adminApi";
+import CancellationModal from "./CancellationModal";
+
 
 const STATUS_OPTIONS = [
   {
@@ -36,6 +38,7 @@ export default function BookingManagePanel({ booking, onClose, onBookingUpdate }
   const [walkers, setWalkers] = useState([]);
   const [walkersLoading, setWalkersLoading] = useState(true);
   const [selectedWalkerId, setSelectedWalkerId] = useState("");
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const isLight = theme === "light";
 
   useEffect(() => {
@@ -116,6 +119,11 @@ export default function BookingManagePanel({ booking, onClose, onBookingUpdate }
   const handleStatusAction = async (status) => {
     if (loadingAction || status === booking.status) return;
 
+    if (status === "Cancelled") {
+      setShowCancelModal(true);
+      return;
+    }
+
     setLoadingAction(status);
     setFeedback(null);
 
@@ -128,6 +136,23 @@ export default function BookingManagePanel({ booking, onClose, onBookingUpdate }
         message: err.message || "Failed to update. Please try again.",
       });
       setLoadingAction(null);
+    }
+  };
+
+  const onConfirmCancelAdmin = async (bookingId, reason, role) => {
+    setLoadingAction("Cancelled");
+    setFeedback(null);
+    try {
+      await cancelBookingAdmin(bookingId, reason);
+      await onBookingUpdate(bookingId, { status: "Cancelled" });
+      setTimeout(onClose, 450);
+    } catch (err) {
+      setFeedback({
+        type: "error",
+        message: err.message || "Failed to cancel booking.",
+      });
+      setLoadingAction(null);
+      throw err;
     }
   };
 
@@ -332,6 +357,14 @@ export default function BookingManagePanel({ booking, onClose, onBookingUpdate }
             )}
           </div>
         </motion.div>
+        
+        <CancellationModal
+          open={showCancelModal}
+          onClose={() => setShowCancelModal(false)}
+          onConfirm={onConfirmCancelAdmin}
+          bookingId={booking.id}
+          role="admin"
+        />
       </div>
     </AnimatePresence>,
     document.body

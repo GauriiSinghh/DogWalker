@@ -1,274 +1,443 @@
-import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
-import { FiPlus, FiTrash2, FiEye, FiX } from "react-icons/fi";
+import { useEffect, useMemo, useRef, useState } from "react";
+import StatusBadge from "./StatusBadge";
 import {
-  getWalkers,
-  getWalker,
   createWalker,
   deleteWalker,
-} from "../services/adminApi";
+  getWalkers,
+  updateWalker,
+  validateWalkerUnique,
+} from "../services/walkersApi";
+import "../styles/walkers.css";
 
-function AvailabilityBadge({ available }) {
-  return (
-    <span
-      className={`admin-entity-badge ${
-        available ? "admin-entity-badge--available" : "admin-entity-badge--busy"
-      }`}
-    >
-      {available ? "Available" : "Busy"}
-    </span>
-  );
+const emptyForm = {
+  name: "",
+  email: "",
+  password: "",
+  mobile_number: "",
+  address: "",
+  profile_image: "",
+  is_available: true,
+};
+
+function isValidEmail(v) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 }
 
-function WalkerDetailModal({ walker, onClose, onDelete, deleting }) {
-  if (!walker) return null;
+function formatDateTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString();
+}
 
-  return (
-    <div className="admin-entity-modal" role="presentation">
-      <div className="admin-entity-modal__backdrop" onClick={onClose} />
-      <motion.div
-        className="admin-entity-modal__dialog"
-        role="dialog"
-        aria-modal="true"
-        initial={{ opacity: 0, scale: 0.98, y: 8 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-      >
-        <header className="admin-entity-modal__header">
-          <div>
-            <span className="admin-entity-modal__chip">Walker #{walker.id}</span>
-            <h3 className="admin-entity-modal__title">{walker.name}</h3>
-          </div>
-          <button type="button" className="admin-entity-modal__close" onClick={onClose}>
-            <FiX />
-          </button>
-        </header>
-
-        <div className="admin-entity-modal__body">
-          <dl className="admin-entity-details">
-            <div className="admin-entity-details__row">
-              <dt>Mobile</dt>
-              <dd>{walker.mobile}</dd>
-            </div>
-            <div className="admin-entity-details__row">
-              <dt>Status</dt>
-              <dd><AvailabilityBadge available={walker.is_available} /></dd>
-            </div>
-            <div className="admin-entity-details__row">
-              <dt>Active assignments</dt>
-              <dd>{walker.active_assignments ?? 0}</dd>
-            </div>
-            <div className="admin-entity-details__row">
-              <dt>Total assignments</dt>
-              <dd>{walker.total_assignments ?? 0}</dd>
-            </div>
-            {walker.created_at && (
-              <div className="admin-entity-details__row">
-                <dt>Added</dt>
-                <dd>{new Date(walker.created_at).toLocaleString("en-IN")}</dd>
-              </div>
-            )}
-          </dl>
-        </div>
-
-        <footer className="admin-entity-modal__footer">
-          <button
-            type="button"
-            className="admin-btn admin-btn--danger"
-            onClick={() => onDelete(walker)}
-            disabled={deleting || (walker.active_assignments ?? 0) > 0}
-          >
-            <FiTrash2 />
-            {deleting ? "Removing..." : "Remove Walker"}
-          </button>
-        </footer>
-      </motion.div>
-    </div>
-  );
+function deriveWalkerStatus(w) {
+  if (w.is_active === false) return { label: "Offline", tone: "gray" };
+  if (w.current_booking_id) {
+    const s = (w.current_booking_status || "Assigned").toLowerCase();
+    if (s === "completed") return { label: "Completed", tone: "green" };
+    if (s === "assigned") return { label: "Assigned", tone: "blue" };
+    if (s === "started" || s === "reached") return { label: w.current_booking_status, tone: "purple" };
+    return { label: "Busy", tone: "orange" };
+  }
+  if (w.is_available) return { label: "Available", tone: "green" };
+  return { label: "Busy", tone: "orange" };
 }
 
 export default function WalkersPanel({ searchQuery = "" }) {
   const [walkers, setWalkers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newMobile, setNewMobile] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [selectedWalker, setSelectedWalker] = useState(null);
-  const [deletingId, setDeletingId] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const loadWalkers = () => {
+  const [showForm, setShowForm] = useState(false);
+  const [formKey, setFormKey] = useState(Date.now());
+  const [editing, setEditing] = useState(null); // walker object or null
+  const [form, setForm] = useState(emptyForm);
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  const uniqTimer = useRef(null);
+
+  async function refresh() {
     setLoading(true);
-    setError("");
-    getWalkers()
-      .then((data) => setWalkers(Array.isArray(data) ? data : []))
-      .catch((err) => setError(err.message || "Could not load walkers"))
-      .finally(() => setLoading(false));
-  };
+    try {
+      const data = await getWalkers();
+      setWalkers(Array.isArray(data) ? data : []);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    loadWalkers();
+    refresh();
   }, []);
 
-  const filteredWalkers = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return walkers;
-    return walkers.filter(
-      (w) =>
-        w.name?.toLowerCase().includes(query) ||
-        w.mobile?.toLowerCase().includes(query)
-    );
+  // when opening create form: hard-reset + force remount to kill autofill
+  function openCreate() {
+    setEditing(null);
+    setErrors({});
+    setForm(emptyForm);
+    setFormKey(Date.now());
+    setShowForm(true);
+  }
+
+  function openEdit(w) {
+    setEditing(w);
+    setErrors({});
+    setFormKey(Date.now());
+    setShowForm(true);
+    setForm({
+      name: w.name || "",
+      email: w.email || "",
+      password: "", // never prefill password
+      mobile_number: w.mobile || "",
+      address: w.address || "",
+      profile_image: w.profile_image || "",
+      is_available: !!w.is_available,
+    });
+  }
+
+  function resetForm() {
+    setErrors({});
+    if (editing) openEdit(editing);
+    else {
+      setForm(emptyForm);
+      setFormKey(Date.now());
+    }
+  }
+
+  function setField(k, v) {
+    setForm((prev) => ({ ...prev, [k]: v }));
+    setErrors((prev) => ({ ...prev, [k]: undefined, form: undefined }));
+  }
+
+  const filtered = useMemo(() => {
+    const q = (searchQuery || "").trim().toLowerCase();
+    if (!q) return walkers;
+    return walkers.filter((w) => {
+      const status = `${w.current_booking_status || ""}`.toLowerCase();
+      return (
+        (w.name || "").toLowerCase().includes(q) ||
+        (w.email || "").toLowerCase().includes(q) ||
+        (w.mobile || "").toLowerCase().includes(q) ||
+        (w.address || "").toLowerCase().includes(q) ||
+        status.includes(q)
+      );
+    });
   }, [walkers, searchQuery]);
 
-  const handleAddWalker = async (e) => {
+  const totalCount = walkers.length;
+
+  function validateClient() {
+    const e = {};
+    if (!form.name.trim()) e.name = "Name is required";
+    if (!form.email.trim()) e.email = "Email is required";
+    else if (!isValidEmail(form.email.trim())) e.email = "Enter a valid email";
+    if (!editing && !form.password.trim()) e.password = "Password is required";
+    if (!form.mobile_number.trim()) e.mobile_number = "Mobile number is required";
+    if (!form.address.trim()) e.address = "Address is required";
+
+    // quick local uniqueness check (still authoritative on backend)
+    const emailLower = form.email.trim().toLowerCase();
+    const mobile = form.mobile_number.trim();
+    const conflict = walkers.find((w) => {
+      if (editing && w.id === editing.id) return false;
+      return (
+        (w.email || "").toLowerCase() === emailLower ||
+        (w.mobile || "") === mobile
+      );
+    });
+    if (conflict) {
+      if ((conflict.email || "").toLowerCase() === emailLower) e.email = "Email already exists";
+      if ((conflict.mobile || "") === mobile) e.mobile_number = "Mobile already exists";
+    }
+
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
+
+  async function validateUniqueBackend(partial = {}) {
+    if (uniqTimer.current) clearTimeout(uniqTimer.current);
+    uniqTimer.current = setTimeout(async () => {
+      try {
+        const res = await validateWalkerUnique({
+          name: partial.name ?? form.name.trim(),
+          email: partial.email ?? form.email.trim(),
+          mobile_number: partial.mobile_number ?? form.mobile_number.trim(),
+          exclude_walker_id: editing?.id,
+        });
+        if (!res?.ok && res?.errors) {
+          setErrors((prev) => ({ ...prev, ...res.errors }));
+        }
+      } catch {
+        // silent (don’t block typing)
+      }
+    }, 250);
+  }
+
+  async function onSave(e) {
     e.preventDefault();
-    if (!newName.trim() || !newMobile.trim()) return;
+    setErrors({});
+    if (!validateClient()) return;
 
     setSaving(true);
-    setError("");
     try {
-      await createWalker({
-        name: newName.trim(),
-        mobile: newMobile.trim(),
-        is_available: true,
-      });
-      setNewName("");
-      setNewMobile("");
-      setShowAddForm(false);
-      loadWalkers();
+      const payload = {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        mobile_number: form.mobile_number.trim(),
+        address: form.address.trim(),
+        profile_image: form.profile_image.trim() || null,
+        is_available: !!form.is_available,
+        ...(form.password.trim() ? { password: form.password.trim() } : {}),
+      };
+
+      if (editing) {
+        await updateWalker(editing.id, payload);
+      } else {
+        await createWalker(payload);
+      }
+
+      await refresh();
+      setShowForm(false);
+      setEditing(null);
+      setForm(emptyForm);
+      setFormKey(Date.now());
     } catch (err) {
-      setError(err.message || "Could not add walker");
+      const detail = err?.data?.detail;
+      if (detail?.errors) {
+        setErrors((prev) => ({ ...prev, ...detail.errors }));
+      } else {
+        setErrors((prev) => ({ ...prev, form: String(detail || err.message || "Save failed") }));
+      }
     } finally {
       setSaving(false);
     }
-  };
+  }
 
-  const handleViewWalker = async (walker) => {
+  async function onDelete(w) {
+    const ok = window.confirm(`Delete walker "${w.name}"?`);
+    if (!ok) return;
+
     try {
-      const detail = await getWalker(walker.id);
-      setSelectedWalker(detail);
+      await deleteWalker(w.id);
+      await refresh();
     } catch (err) {
-      setError(err.message || "Could not load walker details");
+      alert(err?.data?.detail || err.message || "Delete failed");
     }
-  };
-
-  const handleDeleteWalker = async (walker) => {
-    if (!window.confirm(`Remove walker "${walker.name}"?`)) return;
-
-    setDeletingId(walker.id);
-    setError("");
-    try {
-      await deleteWalker(walker.id);
-      setSelectedWalker(null);
-      loadWalkers();
-    } catch (err) {
-      setError(err.message || "Could not remove walker");
-    } finally {
-      setDeletingId(null);
-    }
-  };
+  }
 
   return (
-    <div className="admin-entity-panel">
-      <div className="admin-table-card">
-        <div className="admin-table-card__header">
-          <h2 className="admin-table-card__title">Dog Walkers</h2>
-          <div className="admin-entity-panel__actions">
-            <span className="admin-table-card__count">{filteredWalkers.length} walkers</span>
-            <button
-              type="button"
-              className="admin-btn admin-btn--primary"
-              onClick={() => setShowAddForm((v) => !v)}
-            >
-              <FiPlus />
-              Add Walker
-            </button>
-          </div>
+    <div className="walkers">
+      <div className="walkers__top">
+        <div className="walkers__search">
+          <label className="walkers__label">Search Walker</label>
+          <input
+            className="walkers__input"
+            value={searchQuery}
+            readOnly
+            placeholder="Use dashboard search…"
+          />
         </div>
 
-        {error && <div className="admin-entity-panel__error">{error}</div>}
+        <div className="walkers__count">
+          <div className="walkers__label">Total Walkers</div>
+          <div className="walkers__countValue">{totalCount}</div>
+        </div>
 
-        {showAddForm && (
-          <form className="admin-entity-form" onSubmit={handleAddWalker}>
-            <input
-              type="text"
-              className="admin-entity-form__input"
-              placeholder="Walker name"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              required
-            />
-            <input
-              type="tel"
-              className="admin-entity-form__input"
-              placeholder="Mobile number"
-              value={newMobile}
-              onChange={(e) => setNewMobile(e.target.value)}
-              required
-            />
-            <button type="submit" className="admin-btn admin-btn--primary" disabled={saving}>
-              {saving ? "Saving..." : "Save Walker"}
-            </button>
-          </form>
-        )}
-
-        {loading ? (
-          <p className="admin-entity-panel__hint">Loading walkers...</p>
-        ) : filteredWalkers.length === 0 ? (
-          <div className="admin-table__empty">
-            <p className="admin-table__empty-title">No walkers found</p>
-            <p className="admin-table__empty-text">Add a walker to start assigning bookings.</p>
-          </div>
-        ) : (
-          <div className="admin-table-scroll admin-table-desktop">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Mobile</th>
-                  <th scope="col">Status</th>
-                  <th scope="col" className="admin-table__th-actions">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredWalkers.map((walker) => (
-                  <tr key={walker.id} className="admin-table__row">
-                    <td className="admin-table__name">{walker.name}</td>
-                    <td className="admin-table__cell-muted">{walker.mobile}</td>
-                    <td><AvailabilityBadge available={walker.is_available} /></td>
-                    <td className="admin-table__actions">
-                      <button
-                        type="button"
-                        className="admin-btn admin-btn--ghost"
-                        onClick={() => handleViewWalker(walker)}
-                      >
-                        <FiEye /> View
-                      </button>
-                      <button
-                        type="button"
-                        className="admin-btn admin-btn--ghost admin-btn--danger-text"
-                        onClick={() => handleDeleteWalker(walker)}
-                        disabled={deletingId === walker.id}
-                      >
-                        <FiTrash2 /> Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <div className="walkers__actions">
+          <button className="walkers__btn walkers__btn--primary" onClick={openCreate}>
+            + Add Walker
+          </button>
+        </div>
       </div>
 
-      {selectedWalker && (
-        <WalkerDetailModal
-          walker={selectedWalker}
-          onClose={() => setSelectedWalker(null)}
-          onDelete={handleDeleteWalker}
-          deleting={deletingId === selectedWalker.id}
-        />
+      {showForm && (
+        <form
+          key={formKey}
+          className="walkers__form"
+          onSubmit={onSave}
+          autoComplete="off"
+        >
+          <div className="walkers__formHeader">
+            <div>
+              <h3 className="walkers__formTitle">{editing ? "Edit Walker" : "Add Walker"}</h3>
+              {errors.form && <div className="walkers__formError">{errors.form}</div>}
+            </div>
+            <button
+              type="button"
+              className="walkers__btn walkers__btn--ghost"
+              onClick={() => setShowForm(false)}
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="walkers__grid">
+            <div>
+              <label className="walkers__label">Walker Name *</label>
+              <input
+                className="walkers__input"
+                value={form.name}
+                onChange={(e) => {
+                  setField("name", e.target.value);
+                  validateUniqueBackend({ name: e.target.value });
+                }}
+                name="walker-name"
+                autoComplete="off"
+              />
+              {errors.name && <div className="walkers__error">{errors.name}</div>}
+            </div>
+
+            <div>
+              <label className="walkers__label">Email *</label>
+              <input
+                className="walkers__input"
+                value={form.email}
+                onChange={(e) => {
+                  setField("email", e.target.value);
+                  validateUniqueBackend({ email: e.target.value });
+                }}
+                type="email"
+                name="walker-email"
+                autoComplete="off"
+              />
+              {errors.email && <div className="walkers__error">{errors.email}</div>}
+            </div>
+
+            <div>
+              <label className="walkers__label">Password {editing ? "(optional)" : "*"} </label>
+              <input
+                className="walkers__input"
+                value={form.password}
+                onChange={(e) => setField("password", e.target.value)}
+                type="password"
+                name="walker-new-password"
+                autoComplete="new-password"
+              />
+              {errors.password && <div className="walkers__error">{errors.password}</div>}
+            </div>
+
+            <div>
+              <label className="walkers__label">Mobile Number *</label>
+              <input
+                className="walkers__input"
+                value={form.mobile_number}
+                onChange={(e) => {
+                  setField("mobile_number", e.target.value);
+                  validateUniqueBackend({ mobile_number: e.target.value });
+                }}
+                name="walker-mobile"
+                autoComplete="off"
+                inputMode="tel"
+              />
+              {errors.mobile_number && <div className="walkers__error">{errors.mobile_number}</div>}
+            </div>
+
+            <div className="walkers__gridSpan2">
+              <label className="walkers__label">Address *</label>
+              <input
+                className="walkers__input"
+                value={form.address}
+                onChange={(e) => setField("address", e.target.value)}
+                name="walker-address"
+                autoComplete="off"
+              />
+              {errors.address && <div className="walkers__error">{errors.address}</div>}
+            </div>
+
+            <div className="walkers__gridSpan2">
+              <label className="walkers__label">Profile Image URL (optional)</label>
+              <input
+                className="walkers__input"
+                value={form.profile_image}
+                onChange={(e) => setField("profile_image", e.target.value)}
+                name="walker-profile-image"
+                autoComplete="off"
+              />
+            </div>
+          </div>
+
+          <div className="walkers__formButtons">
+            <button className="walkers__btn walkers__btn--primary" type="submit" disabled={saving}>
+              {saving ? "Saving…" : "Save Walker"}
+            </button>
+            <button className="walkers__btn" type="button" onClick={resetForm} disabled={saving}>
+              Reset
+            </button>
+          </div>
+        </form>
       )}
+
+      <div className="walkers__tableWrap">
+        <table className="walkers__table">
+          <thead>
+            <tr>
+              <th>Profile</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Mobile</th>
+              <th>Address</th>
+              
+              <th>Current Booking</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th style={{ width: 160 }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan="10" className="walkers__muted">Loading…</td></tr>
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan="10" className="walkers__muted">No walkers found.</td></tr>
+            ) : (
+              filtered.map((w) => {
+                const st = deriveWalkerStatus(w);
+                return (
+                  <tr key={w.id}>
+                    <td>
+                      <div className="walkers__avatar">
+                        {w.profile_image ? (
+                          <img src={w.profile_image} alt={w.name} />
+                        ) : (
+                          <div className="walkers__avatarFallback">{(w.name || "?")[0]}</div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="walkers__strong">{w.name}</td>
+                    <td>{w.email || "—"}</td>
+                    <td>{w.mobile || "—"}</td>
+                    <td className="walkers__truncate" title={w.address || ""}>{w.address || "—"}</td>
+                   
+                    <td>
+                      {w.current_booking_id ? (
+                        <span>
+                          #{w.current_booking_id}{" "}
+                          <span className="walkers__muted">({w.current_booking_status || "Assigned"})</span>
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td>
+                      <StatusBadge status={st.label}  />
+                    </td>
+                    <td>{formatDateTime(w.created_at)}</td>
+                    <td>
+                      <div className="walkers__rowActions">
+                        <button className="walkers__link" type="button" onClick={() => openEdit(w)}>
+                          Edit
+                        </button>
+                        <button className="walkers__link walkers__link--danger" type="button" onClick={() => onDelete(w)}>
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

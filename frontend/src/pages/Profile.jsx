@@ -1,12 +1,12 @@
-// src/pages/Profile.jsx
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, Link } from "react-router-dom";
-import { FaTimes, FaUser, FaPaw } from "react-icons/fa";
+import { FaTimes, FaUser, FaPaw, FaPlus, FaEdit, FaTrash } from "react-icons/fa";
 import { useAuth } from "../hooks/useAuth.js";
 import { useToast } from "../components/Toast.jsx";
 import { API_BASE } from "../config/api.js";
 import BookingHistoryPanel from "../components/BookingHistoryPanel.jsx";
+import AddPetModal from "../components/AddPetModal.jsx";
 import logo from "../assets/images/logo.png";
 import "../styles/modal-base.css";
 import "../styles/signup.css";
@@ -18,11 +18,32 @@ const pageTransition = {
   transition: { duration: 0.3, ease: [0.4, 0, 0.2, 1] },
 };
 
-const MAX_PET_IMAGE_SIZE = 2 * 1024 * 1024;
-
 function authHeaders() {
   const token = localStorage.getItem("token");
-  return { Authorization: `Bearer ${token}` };
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function normalizePet(pet) {
+  return {
+    id: pet.id,
+    user_id: pet.user_id,
+    name: pet.name || pet.pet_name || "",
+    pet_image: pet.pet_image || pet.image_url || "",
+    image_url: pet.image_url || pet.pet_image || "",
+  };
+}
+
+async function readError(res, fallback) {
+  try {
+    const data = await res.json();
+    if (typeof data.detail === "string") return data.detail;
+    if (data.detail?.errors) return Object.values(data.detail.errors).join(", ");
+    if (Array.isArray(data.detail)) return data.detail.map((e) => e.msg).join(", ");
+    if (data.message) return data.message;
+  } catch {
+    // ignore
+  }
+  return fallback;
 }
 
 function Profile({ view = "profile" }) {
@@ -31,35 +52,40 @@ function Profile({ view = "profile" }) {
   const toast = useToast();
 
   const [profile, setProfile] = useState({
-  name: "",
-  email: "",
-  mobile: "",
-  apartment: "",
-  flatNo: "",
-  address: "",
-  pet_name: "",
-  pet_image: "",
-});
+    name: "",
+    email: "",
+    mobile: "",
+    apartment: "",
+    flatNo: "",
+    address: "",
+    pet_name: "",
+    pet_image: "",
+  });
 
-const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
   const [editPersonal, setEditPersonal] = useState(false);
   const [form, setForm] = useState({
-    name: "", email: "", mobile: "", apartment: "", flatNo: "", address: "",
+    name: "",
+    email: "",
+    mobile: "",
+    apartment: "",
+    flatNo: "",
+    address: "",
   });
   const [showErrors, setShowErrors] = useState(false);
   const [personalError, setPersonalError] = useState("");
   const [personalSuccess, setPersonalSuccess] = useState("");
 
-  const [editPet, setEditPet] = useState(false);
-  const [petName, setPetName] = useState("");
-  const [petImage, setPetImage] = useState("");
-  const [petImagePreview, setPetImagePreview] = useState("");
-  const [petImageChanged, setPetImageChanged] = useState(false);
-  const [petImageError, setPetImageError] = useState("");
-  const [petError, setPetError] = useState("");
+  const [pets, setPets] = useState([]);
+  const [petsLoading, setPetsLoading] = useState(false);
+  const [petsError, setPetsError] = useState("");
   const [petSuccess, setPetSuccess] = useState("");
+  const [petModalOpen, setPetModalOpen] = useState(false);
+  const [petModalMode, setPetModalMode] = useState("add");
+  const [editingPet, setEditingPet] = useState(null);
+  const [deletingPetId, setDeletingPetId] = useState(null);
 
   const APARTMENTS = [
     "Sobha Dream Acres Apartment",
@@ -68,11 +94,44 @@ const [loading, setLoading] = useState(false);
     "DLF Jigani",
   ];
 
+  const syncPrimaryPet = useCallback(
+    (list) => {
+      const primary = list?.[0];
+      updateUser({
+        pet_name: primary?.name || "",
+        pet_image: primary?.pet_image || "",
+      });
+    },
+    [updateUser]
+  );
+
+  const loadPets = useCallback(async () => {
+    setPetsLoading(true);
+    setPetsError("");
+
+    try {
+      const res = await fetch(`${API_BASE}/pets`, { headers: authHeaders() });
+      if (!res.ok) throw new Error(await readError(res, "Could not load pets"));
+      const data = await res.json();
+      const normalized = Array.isArray(data) ? data.map(normalizePet) : [];
+      setPets(normalized);
+      syncPrimaryPet(normalized);
+    } catch (err) {
+      setPetsError(err.message || "Could not load pets");
+    } finally {
+      setPetsLoading(false);
+    }
+  }, [syncPrimaryPet]);
+
   const loadProfile = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+
     try {
       const res = await fetch(`${API_BASE}/profile`, { headers: authHeaders() });
-      if (!res.ok) throw new Error("Could not load profile");
+      if (!res.ok) throw new Error(await readError(res, "Could not load profile"));
       const data = await res.json();
+
       setProfile(data);
       setForm({
         name: data.name || "",
@@ -82,8 +141,7 @@ const [loading, setLoading] = useState(false);
         flatNo: data.flatNo || "",
         address: data.address || "",
       });
-      setPetName(data.pet_name || "");
-      setPetImagePreview(data.pet_image || "");
+
       updateUser({
         name: data.name || "",
         email: data.email || "",
@@ -104,7 +162,8 @@ const [loading, setLoading] = useState(false);
   useEffect(() => {
     window.scrollTo(0, 0);
     loadProfile();
-  }, [loadProfile]);
+    loadPets();
+  }, [loadProfile, loadPets]);
 
   function validatePersonal() {
     if (form.name.trim().length < 2) return false;
@@ -127,10 +186,12 @@ const [loading, setLoading] = useState(false);
   async function savePersonal() {
     setPersonalError("");
     setPersonalSuccess("");
+
     if (!validatePersonal()) {
       setShowErrors(true);
       return;
     }
+
     const changed = buildChangedFields();
     if (Object.keys(changed).length === 0) {
       setEditPersonal(false);
@@ -140,15 +201,14 @@ const [loading, setLoading] = useState(false);
     const previousData = { ...profile };
     const optimisticData = { ...profile, ...changed };
 
-    // 1. Update UI instantly
     setProfile(optimisticData);
     updateUser(changed);
     setEditPersonal(false);
     setShowErrors(false);
 
     try {
-      // 2. Sync with backend silently
       let res;
+
       if (profile?.id != null) {
         res = await fetch(`${API_BASE}/api/users/${profile.id}`, {
           method: "PUT",
@@ -162,21 +222,27 @@ const [loading, setLoading] = useState(false);
           body: JSON.stringify(changed),
         });
       }
+
+      if (!res.ok) {
+        throw new Error(await readError(res, "Update failed"));
+      }
+
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Update failed");
-      setProfile(data);
+      const mergedData = { ...optimisticData, ...data };
+
+      setProfile(mergedData);
       updateUser({
-        name: data.name,
-        email: data.email,
-        mobile: data.mobile,
-        apartment: data.apartment,
-        flatNo: data.flatNo,
-        address: data.address,
+        name: mergedData.name,
+        email: mergedData.email,
+        mobile: mergedData.mobile,
+        apartment: mergedData.apartment,
+        flatNo: mergedData.flatNo,
+        address: mergedData.address,
       });
+
       setPersonalSuccess("Profile updated!");
       setTimeout(() => setPersonalSuccess(""), 3000);
     } catch (err) {
-      // 3. Revert on failure
       setProfile(previousData);
       updateUser({
         name: previousData.name,
@@ -205,98 +271,64 @@ const [loading, setLoading] = useState(false);
     setEditPersonal(false);
   }
 
-  function handlePetImageChange(e) {
-    const file = e.target.files?.[0];
-    setPetImageError("");
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setPetImageError("Please upload an image file");
-      e.target.value = "";
-      return;
-    }
-    if (file.size > MAX_PET_IMAGE_SIZE) {
-      setPetImageError("Image must be smaller than 2 MB");
-      e.target.value = "";
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === "string" ? reader.result : "";
-      setPetImage(result);
-      setPetImagePreview(result);
-      setPetImageChanged(true);
-      // Instant preview in global user state
-      updateUser({ pet_image: result });
-    };
-    reader.readAsDataURL(file);
+  function openAddPetModal() {
+    setEditingPet(null);
+    setPetModalMode("add");
+    setPetModalOpen(true);
   }
 
-  async function savePet() {
-    setPetError("");
-    setPetSuccess("");
-    if (petName.trim().length < 2) {
-      setPetError("Please enter a valid pet name");
-      return;
-    }
-    const body = {};
-    if (petName !== (profile?.pet_name || "")) body.pet_name = petName.trim();
-    if (petImageChanged && petImage) body.pet_image = petImage;
-    if (Object.keys(body).length === 0) {
-      setEditPet(false);
-      return;
-    }
+  function openEditPetModal(pet) {
+    setEditingPet(pet);
+    setPetModalMode("edit");
+    setPetModalOpen(true);
+  }
 
-    const previousData = { ...profile };
-    const optimisticData = {
-      ...profile,
-      pet_name: body.pet_name ?? profile.pet_name,
-      pet_image: body.pet_image ?? profile.pet_image,
-    };
+  function closePetModal() {
+    setPetModalOpen(false);
+    setEditingPet(null);
+  }
 
-    // 1. Update UI instantly
-    setProfile(optimisticData);
-    updateUser({
-      pet_name: optimisticData.pet_name || "",
-      pet_image: optimisticData.pet_image || "",
-    });
-    setEditPet(false);
+  async function handlePetSaved() {
+    closePetModal();
+    await loadPets();
+
+    setPetSuccess(petModalMode === "edit" ? "Pet updated!" : "Pet added!");
+    setTimeout(() => setPetSuccess(""), 3000);
+  }
+
+  async function deletePet(pet) {
+    const ok = window.confirm(`Delete ${pet.name}? This cannot be undone.`);
+    if (!ok) return;
+
+    const previousPets = [...pets];
+    const optimisticPets = pets.filter((p) => p.id !== pet.id);
+
+    setDeletingPetId(pet.id);
+    setPets(optimisticPets);
+    syncPrimaryPet(optimisticPets);
+    setPetsError("");
 
     try {
-      const res = await fetch(`${API_BASE}/profile`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify(body),
+      const res = await fetch(`${API_BASE}/pets/${pet.id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Update failed");
-      setProfile(data);
-      setPetName(data.pet_name || "");
-      setPetImagePreview(data.pet_image || "");
-      setPetImageChanged(false);
-      updateUser({ pet_name: data.pet_name || "", pet_image: data.pet_image || "" });
-      setPetSuccess("Pet info updated!");
+
+      if (!res.ok) {
+        throw new Error(await readError(res, "Could not delete pet"));
+      }
+
+      await loadPets();
+      setPetSuccess("Pet deleted!");
       setTimeout(() => setPetSuccess(""), 3000);
     } catch (err) {
-      setProfile(previousData);
-      setPetName(previousData.pet_name || "");
-      setPetImagePreview(previousData.pet_image || "");
-      updateUser({
-        pet_name: previousData.pet_name || "",
-        pet_image: previousData.pet_image || "",
-      });
-      setPetError(err.message || "Could not update pet info");
-      toast.error("Failed to update. Changes reverted.");
+      setPets(previousPets);
+      syncPrimaryPet(previousPets);
+      setPetsError(err.message || "Could not delete pet");
+      toast.error("Failed to delete pet.");
+    } finally {
+      setDeletingPetId(null);
     }
-  }
-
-  function cancelPet() {
-    setPetName(profile.pet_name || "");
-    setPetImagePreview(profile.pet_image || "");
-    setPetImage("");
-    setPetImageChanged(false);
-    setPetImageError("");
-    setPetError("");
-    setEditPet(false);
   }
 
   if (loadError) {
@@ -305,7 +337,21 @@ const [loading, setLoading] = useState(false);
         <div className="auth-card">
           <div className="auth-body" style={{ padding: "40px 24px" }}>
             <div className="global-error">{loadError}</div>
-            <button className="btn btn-outline" onClick={() => navigate("/")}>Go Home</button>
+            <button className="btn btn-outline" onClick={() => navigate("/")}>
+              Go Home
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading && view === "profile") {
+    return (
+      <div className="auth-page">
+        <div className="auth-card">
+          <div className="auth-body" style={{ padding: "40px 24px" }}>
+            Loading profile...
           </div>
         </div>
       </div>
@@ -321,7 +367,7 @@ const [loading, setLoading] = useState(false);
         exit="exit"
         variants={pageTransition}
         style={{
-          maxWidth: view === "bookings" ? "960px" : "640px",
+          maxWidth: view === "bookings" ? "960px" : "760px",
           width: "100%",
           marginBottom: 24,
           borderRadius: "24px",
@@ -330,7 +376,13 @@ const [loading, setLoading] = useState(false);
           background: "rgba(255, 255, 255, 0.95)",
         }}
       >
-        <div className="auth-header" style={{ padding: "24px 32px 16px", borderBottom: "1px solid rgba(0, 0, 0, 0.04)" }}>
+        <div
+          className="auth-header"
+          style={{
+            padding: "24px 32px 16px",
+            borderBottom: "1px solid rgba(0, 0, 0, 0.04)",
+          }}
+        >
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <Link to="/" className="auth-header-logo">
               <img src={logo} alt="Zuppy" style={{ height: "32px", width: "auto" }} />
@@ -343,11 +395,29 @@ const [loading, setLoading] = useState(false);
 
         {view === "profile" && (
           <div className="auth-body" style={{ padding: "32px 32px 40px", gap: "32px" }}>
-            <div style={{ background: "#ffffff", borderRadius: "16px", border: "1px solid rgba(0,0,0,0.04)", padding: "24px", boxShadow: "0 4px 12px rgba(0,0,0,0.01)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+            <div
+              style={{
+                background: "#ffffff",
+                borderRadius: "16px",
+                border: "1px solid rgba(0,0,0,0.04)",
+                padding: "24px",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.01)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "20px",
+                  gap: 16,
+                }}
+              >
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <FaUser style={{ color: "var(--z-primary)", fontSize: "1.1rem" }} />
-                  <h2 style={{ fontSize: "1.25rem", fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>Personal Details</h2>
+                  <h2 style={{ fontSize: "1.25rem", fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>
+                    Personal Details
+                  </h2>
                 </div>
                 {!editPersonal && (
                   <button
@@ -364,7 +434,14 @@ const [loading, setLoading] = useState(false);
               {personalError && <div className="global-error">{personalError}</div>}
               {personalSuccess && <div className="global-success">{personalSuccess}</div>}
 
-              <form className="auth-form" onSubmit={(e) => { e.preventDefault(); savePersonal(); }} noValidate>
+              <form
+                className="auth-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  savePersonal();
+                }}
+                noValidate
+              >
                 <div className="form-group">
                   <label className="form-label">Full Name</label>
                   <input
@@ -373,29 +450,40 @@ const [loading, setLoading] = useState(false);
                     disabled={!editPersonal}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
                   />
-                  {showErrors && form.name.trim().length < 2 && <div className="field-error-msg">Enter your full name</div>}
+                  {showErrors && form.name.trim().length < 2 && (
+                    <div className="field-error-msg">Enter your full name</div>
+                  )}
                 </div>
 
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Email Address</label>
                     <input
-                      className={`form-input ${showErrors && (!form.email || !form.email.includes("@")) ? "invalid" : ""}`}
+                      className={`form-input ${
+                        showErrors && (!form.email || !form.email.includes("@")) ? "invalid" : ""
+                      }`}
                       value={form.email}
                       disabled={!editPersonal}
                       onChange={(e) => setForm({ ...form, email: e.target.value })}
                     />
-                    {showErrors && (!form.email || !form.email.includes("@")) && <div className="field-error-msg">Enter a valid email</div>}
+                    {showErrors && (!form.email || !form.email.includes("@")) && (
+                      <div className="field-error-msg">Enter a valid email</div>
+                    )}
                   </div>
+
                   <div className="form-group">
                     <label className="form-label">Mobile Number</label>
                     <input
-                      className={`form-input ${showErrors && !/^(\+91|91)?[6-9]\d{9}$/.test(form.mobile.trim()) ? "invalid" : ""}`}
+                      className={`form-input ${
+                        showErrors && !/^(\+91|91)?[6-9]\d{9}$/.test(form.mobile.trim()) ? "invalid" : ""
+                      }`}
                       value={form.mobile}
                       disabled={!editPersonal}
                       onChange={(e) => setForm({ ...form, mobile: e.target.value })}
                     />
-                    {showErrors && !/^(\+91|91)?[6-9]\d{9}$/.test(form.mobile.trim()) && <div className="field-error-msg">Enter valid mobile number</div>}
+                    {showErrors && !/^(\+91|91)?[6-9]\d{9}$/.test(form.mobile.trim()) && (
+                      <div className="field-error-msg">Enter valid mobile number</div>
+                    )}
                   </div>
                 </div>
 
@@ -408,9 +496,15 @@ const [loading, setLoading] = useState(false);
                     onChange={(e) => setForm({ ...form, apartment: e.target.value })}
                   >
                     <option value="">-- Choose Apartment --</option>
-                    {APARTMENTS.map((a) => <option key={a} value={a}>{a}</option>)}
+                    {APARTMENTS.map((a) => (
+                      <option key={a} value={a}>
+                        {a}
+                      </option>
+                    ))}
                   </select>
-                  {showErrors && !form.apartment && <div className="field-error-msg">Please select an apartment</div>}
+                  {showErrors && !form.apartment && (
+                    <div className="field-error-msg">Please select an apartment</div>
+                  )}
                 </div>
 
                 <div className="form-row">
@@ -422,88 +516,214 @@ const [loading, setLoading] = useState(false);
                       disabled={!editPersonal}
                       onChange={(e) => setForm({ ...form, flatNo: e.target.value })}
                     />
-                    {showErrors && !form.flatNo.trim() && <div className="field-error-msg">Enter flat/villa number</div>}
+                    {showErrors && !form.flatNo.trim() && (
+                      <div className="field-error-msg">Enter flat/villa number</div>
+                    )}
                   </div>
+
                   <div className="form-group">
                     <label className="form-label">Detailed Address</label>
                     <input
-                      className={`form-input ${showErrors && form.address.trim().length < 10 ? "invalid" : ""}`}
+                      className={`form-input ${
+                        showErrors && form.address.trim().length < 10 ? "invalid" : ""
+                      }`}
                       value={form.address}
                       disabled={!editPersonal}
                       onChange={(e) => setForm({ ...form, address: e.target.value })}
                     />
-                    {showErrors && form.address.trim().length < 10 && <div className="field-error-msg">Please enter detailed address (min 10 chars)</div>}
+                    {showErrors && form.address.trim().length < 10 && (
+                      <div className="field-error-msg">
+                        Please enter detailed address (min 10 chars)
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {editPersonal && (
                   <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
-                    <button type="submit" className="btn-primary" style={{ minHeight: "44px", padding: "10px 24px", width: "auto" }}>Save Changes</button>
-                    <button type="button" className="btn btn-outline" onClick={cancelPersonal} style={{ height: "44px", width: "auto" }}>Cancel</button>
+                    <button
+                      type="submit"
+                      className="btn-primary"
+                      style={{ minHeight: "44px", padding: "10px 24px", width: "auto" }}
+                    >
+                      Save Changes
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      onClick={cancelPersonal}
+                      style={{ height: "44px", width: "auto" }}
+                    >
+                      Cancel
+                    </button>
                   </div>
                 )}
               </form>
             </div>
 
-            <div style={{ background: "#ffffff", borderRadius: "16px", border: "1px solid rgba(0,0,0,0.04)", padding: "24px", boxShadow: "0 4px 12px rgba(0,0,0,0.01)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+            <div
+              style={{
+                background: "#ffffff",
+                borderRadius: "16px",
+                border: "1px solid rgba(0,0,0,0.04)",
+                padding: "24px",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.01)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "20px",
+                  gap: 16,
+                  flexWrap: "wrap",
+                }}
+              >
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <FaPaw style={{ color: "var(--z-primary)", fontSize: "1.1rem" }} />
-                  <h2 style={{ fontSize: "1.25rem", fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>Pet Information</h2>
+                  <h2 style={{ fontSize: "1.25rem", fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>
+                    My Pets
+                  </h2>
                 </div>
-                {!editPet && (
-                  <button
-                    className="btn btn-outline"
-                    type="button"
-                    onClick={() => setEditPet(true)}
-                    style={{ padding: "6px 14px", fontSize: "0.85rem", height: "auto" }}
-                  >
-                    Edit Pet
-                  </button>
-                )}
+
+                <button
+                  className="btn btn-outline"
+                  type="button"
+                  onClick={openAddPetModal}
+                  style={{ padding: "6px 14px", fontSize: "0.85rem", height: "auto" }}
+                >
+                  <FaPlus style={{ marginRight: 6 }} />
+                  Add New Pet
+                </button>
               </div>
 
-              {petError && <div className="global-error">{petError}</div>}
+              {petsError && <div className="global-error">{petsError}</div>}
               {petSuccess && <div className="global-success">{petSuccess}</div>}
 
-              <div className="auth-form">
-                <div className="form-row" style={{ alignItems: "center" }}>
-                  <div className="form-group">
-                    <label className="form-label">Pet Name</label>
-                    <input
-                      className={`form-input ${editPet && petName.trim().length < 2 ? "invalid" : ""}`}
-                      value={petName}
-                      disabled={!editPet}
-                      onChange={(e) => setPetName(e.target.value)}
-                      placeholder="Bruno"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Pet Photo</label>
-                    <div className="pet-image-upload">
-                      {editPet && (
-                        <input id="profile-pet-image" type="file" accept="image/*" className="pet-image-input" onChange={handlePetImageChange} />
-                      )}
-                      <label htmlFor="profile-pet-image" className="pet-image-label" style={{ height: "80px", borderRadius: "16px" }}>
-                        {petImagePreview ? (
-                          <img src={petImagePreview} alt="Pet" className="pet-image-preview" style={{ height: "80px", width: "100%", objectFit: "cover" }} />
+              {petsLoading ? (
+                <div style={{ color: "#64748b", fontSize: 14 }}>Loading pets...</div>
+              ) : (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gap: 16,
+                  }}
+                >
+                  {pets.map((pet) => (
+                    <div
+                      key={pet.id}
+                      style={{
+                        border: "1px solid rgba(15, 23, 42, 0.08)",
+                        borderRadius: 18,
+                        background: "#fff",
+                        padding: 14,
+                        boxShadow: "0 10px 24px rgba(15, 23, 42, 0.04)",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 12,
+                      }}
+                    >
+                      <div
+                        style={{
+                          height: 140,
+                          borderRadius: 16,
+                          background: "rgba(249, 115, 22, 0.08)",
+                          overflow: "hidden",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "var(--z-primary)",
+                        }}
+                      >
+                        {pet.pet_image ? (
+                          <img
+                            src={pet.pet_image}
+                            alt={pet.name}
+                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          />
                         ) : (
-                          <span style={{ fontSize: "0.85rem" }}>{editPet ? "Upload a photo" : "No photo available"}</span>
+                          <FaPaw size={36} />
                         )}
-                      </label>
-                    </div>
-                    {petImageError && <div className="field-error-msg">{petImageError}</div>}
-                  </div>
-                </div>
+                      </div>
 
-                {editPet && (
-                  <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
-                    <button type="button" className="btn-primary" onClick={savePet} style={{ minHeight: "44px", padding: "10px 24px", width: "auto" }}>Save Photo</button>
-                    <button type="button" className="btn btn-outline" onClick={cancelPet} style={{ height: "44px", width: "auto" }}>Cancel</button>
-                  </div>
-                )}
-              </div>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>
+                          {pet.name}
+                        </h3>
+                        <p style={{ margin: "4px 0 0", fontSize: 12, color: "#64748b" }}>
+                          Saved pet profile
+                        </p>
+                      </div>
+
+                      <div style={{ display: "flex", gap: 8, marginTop: "auto" }}>
+                        <button
+                          type="button"
+                          className="btn btn-outline"
+                          onClick={() => openEditPetModal(pet)}
+                          style={{
+                            height: 38,
+                            flex: 1,
+                            padding: "8px 10px",
+                            fontSize: 13,
+                          }}
+                        >
+                          <FaEdit style={{ marginRight: 6 }} />
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-outline"
+                          onClick={() => deletePet(pet)}
+                          disabled={deletingPetId === pet.id}
+                          style={{
+                            height: 38,
+                            flex: 1,
+                            padding: "8px 10px",
+                            fontSize: 13,
+                            color: "#dc2626",
+                            borderColor: "rgba(220, 38, 38, 0.25)",
+                          }}
+                        >
+                          <FaTrash style={{ marginRight: 6 }} />
+                          {deletingPetId === pet.id ? "..." : "Delete"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={openAddPetModal}
+                    className="btn btn-outline"
+                    style={{
+                      minHeight: 240,
+                      borderRadius: 18,
+                      borderStyle: "dashed",
+                      background: "rgba(249, 115, 22, 0.03)",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 10,
+                      color: "var(--z-primary)",
+                    }}
+                  >
+                    <FaPlus size={26} />
+                    <span style={{ fontWeight: 800 }}>Add New Pet</span>
+                  </button>
+                </div>
+              )}
             </div>
+
+            <AddPetModal
+              open={petModalOpen}
+              mode={petModalMode}
+              pet={editingPet}
+              onClose={closePetModal}
+              onSaved={handlePetSaved}
+            />
           </div>
         )}
 

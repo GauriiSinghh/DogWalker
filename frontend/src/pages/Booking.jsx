@@ -1,5 +1,5 @@
 // src/pages/Booking.jsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef} from "react";
 import { motion } from "framer-motion";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { FaTimes } from "react-icons/fa";
@@ -10,6 +10,7 @@ import SuccessModal from "../components/SuccessModal.jsx";
 import logo from "../assets/images/logo.png";
 import "../styles/modal-base.css";
 import "../styles/signup.css";
+import SelectPetStep from "../components/SelectPetStep.jsx";
 
 const pageTransition = {
   initial: { opacity: 0, y: 15 },
@@ -48,6 +49,12 @@ function Booking() {
   const [loading, setLoading] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
   const [confirmed, setConfirmed] = useState(null);
+  const [currentStep, setCurrentStep] = useState(
+  location.state?.step || "details"
+);
+
+  const [selectedPet, setSelectedPet] = useState(null);
+  const formRef = useRef(null);
   const [bookingAmount, setBookingAmount] = useState(
     prefillSelf && user?.apartment ? APARTMENT_PRICES[user.apartment] ?? null : null
   );
@@ -193,14 +200,21 @@ function Booking() {
       setShowErrors(true);
       return;
     }
-
+if (prefillSelf && !selectedPet) {
+  setCurrentStep("pet");
+  return;
+}
     const bookingData = {
-      apartment, name, mobile, flatNo, address,
-      email: user?.email || null,
-      ...(bookForOther && {
-        pet_name: petName.trim(),
-        pet_image: petImage,
-      }),
+  apartment,
+  name,
+  mobile,
+  flatNo,
+  address,
+  email: user?.email || null,
+
+  ...(prefillSelf && selectedPet && {
+    pet_id: selectedPet.id,
+  }),
     };
 
     setLoading(true);
@@ -264,6 +278,8 @@ function Booking() {
 
   return (
     <>
+    
+  {currentStep === "details" && (
       <div className="auth-page">
         <motion.div 
           className="auth-card"
@@ -287,7 +303,7 @@ function Booking() {
               <p className="auth-subtitle">Enter the recipient&apos;s details and their pet&apos;s info.</p>
             )}
 
-            <form className="auth-form" style={{ marginTop: bookForOther ? "16px" : "24px" }} onSubmit={handleSubmit} noValidate>
+            <form ref={formRef} className="auth-form" style={{ marginTop: bookForOther ? "16px" : "24px" }} onSubmit={handleSubmit} noValidate>
               {error && <div className="global-error">{error}</div>}
 
               <div className="form-group">
@@ -410,14 +426,55 @@ function Booking() {
               )}
 
               <div className="sticky-footer">
-                <button type="submit" className="btn-primary" disabled={loading}>
-                  {loading ? "Processing..." : "🐾 Book a Walker"}
+                <button type={prefillSelf ? "button" : "submit"} className="btn-primary" disabled={loading}
+onClick={()=>{
+    if(prefillSelf){
+        if(!validateForm()){
+            setShowErrors(true);
+            return;
+        }
+        setCurrentStep("pet");
+        return;
+    }
+
+   formRef.current?.requestSubmit();
+}}>
+                  {prefillSelf
+  ? "Continue"
+  : loading
+      ? "Processing..."
+      : "🐾 Book a Walker"}
                 </button>
               </div>
             </form>
           </div>
         </motion.div>
       </div>
+  )}
+  {currentStep === "pet" && (
+<div className="auth-page">
+    <motion.div
+      className="auth-card"
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      variants={pageTransition}
+    >
+      <SelectPetStep
+        selectedPetId={selectedPet?.id}
+        onSelectPet={setSelectedPet}
+        onBack={() => setCurrentStep("details")}
+        onContinue={() => {
+          setCurrentStep("details");
+
+          setTimeout(() => {
+           formRef.current?.requestSubmit();
+          }, 0);
+        }}
+      />
+    </motion.div>
+  </div>
+)}
 
       <SuccessModal
         open={!!confirmed}

@@ -94,3 +94,13 @@ export const updateBooking = async (id, data) => {
   });
   return parseResponse(response);
 };
+
+export const cancelBookingAdmin = async (bookingId, reason) => {
+  const response = await fetch(`${API_URL}/bookings/${bookingId}/cancel`, {
+    method: "POST",
+    headers: authHeaders(true),
+    body: JSON.stringify({ reason, cancelled_by: "admin" }),
+  });
+  return parseResponse(response);
+};
+
