@@ -49,15 +49,25 @@ function Booking() {
   const [loading, setLoading] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
   const [confirmed, setConfirmed] = useState(null);
-  const [currentStep, setCurrentStep] = useState(
-  location.state?.step || "details"
-);
+  const [currentStep, setCurrentStep] = useState(() => {
+    if (prefillSelf) {
+      const hasRequiredDetails =
+        user?.apartment &&
+        user?.name?.trim()?.length >= 2 &&
+        /^(\+91|91)?[6-9]\d{9}$/.test(user?.mobile?.trim() || "") &&
+        user?.flatNo?.trim() &&
+        user?.address?.trim()?.length >= 10;
+      return hasRequiredDetails ? "pet" : "details";
+    }
+    return location.state?.step || "details";
+  });
 
   const [selectedPet, setSelectedPet] = useState(null);
   const formRef = useRef(null);
   const [bookingAmount, setBookingAmount] = useState(
     prefillSelf && user?.apartment ? APARTMENT_PRICES[user.apartment] ?? null : null
   );
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -191,6 +201,74 @@ function Booking() {
       }
     } catch {
       // keep optimistic value
+    }
+  }
+
+  // Direct book + pay for self-bookings (called from SelectPetStep)
+  async function handleBookAndPay(pet) {
+    setSubmitting(true);
+    setError("");
+
+    const bookingData = {
+      apartment,
+      name,
+      mobile,
+      flatNo,
+      address,
+      email: user?.email || null,
+      pet_id: pet.id,
+    };
+
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_BASE}/book`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(bookingData),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Booking failed");
+
+      updateUser({ apartment, name, mobile, flatNo, address });
+
+      await payForBooking({
+        bookingId: data.id,
+        token,
+        user,
+        name,
+        email: data.email || user?.email,
+        mobile,
+      });
+
+      const currentDate = new Date().toLocaleDateString("en-IN", {
+        day: "2-digit", month: "short", year: "numeric",
+      });
+      const currentTime = new Date().toLocaleTimeString("en-IN", {
+        hour: "2-digit", minute: "2-digit", hour12: true,
+      });
+
+      setConfirmed({
+        id: data.id,
+        name,
+        apartment,
+        flatNo,
+        mobile,
+        address,
+        status: data.status || "A walker will be assigned shortly",
+        date: currentDate,
+        time: currentTime,
+        email: data.email || user?.email,
+      });
+
+      setShowErrors(false);
+    } catch (err) {
+      setError(err.message || "Could not complete booking. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -464,14 +542,14 @@ onClick={()=>{
         selectedPetId={selectedPet?.id}
         onSelectPet={setSelectedPet}
         onBack={() => setCurrentStep("details")}
-        onContinue={() => {
-          setCurrentStep("details");
-
-          setTimeout(() => {
-           formRef.current?.requestSubmit();
-          }, 0);
-        }}
+        onContinue={(pet) => handleBookAndPay(pet)}
+        submitting={submitting}
       />
+      {error && currentStep === "pet" && (
+        <div style={{ padding: "0 24px 16px" }}>
+          <div className="global-error">{error}</div>
+        </div>
+      )}
     </motion.div>
   </div>
 )}

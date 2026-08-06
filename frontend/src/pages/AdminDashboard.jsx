@@ -7,7 +7,9 @@ import StatsCards from "../components/StatsCards";
 import BookingTable from "../components/BookingTable";
 import WalkersPanel from "../components/WalkersPanel";
 import CustomersPanel from "../components/CustomersPanel";
+import PricingPanel from "../components/PricingPanel";
 import ThemeToggle from "../components/ThemeToggle";
+
 import { useAdminTheme } from "../hooks/useAdminTheme";
 import "../styles/admin.css";
 import { getTotalRevenue, getDashboardStats } from "../services/dashboardApi";
@@ -184,6 +186,7 @@ const ws = new WebSocket(WS_URL);
   const showChart = activeSection === "dashboard";
   const showWalkers = activeSection === "walkers";
   const showCustomers = activeSection === "customers";
+  const showPricing = activeSection === "pricing";
   const showPlaceholder = activeSection === "settings";
 
   const searchPlaceholder =
@@ -198,10 +201,12 @@ const ws = new WebSocket(WS_URL);
     bookings: { title: "Bookings", subtitle: "Manage and update walk requests" },
     walkers: { title: "Walkers", subtitle: "Walker management" },
     customers: { title: "Customers", subtitle: "Customer directory" },
+    pricing: { title: "Pricing Management", subtitle: "Configure dynamic base & subscription prices for all services" },
     settings: { title: "Settings", subtitle: "Admin configuration" },
   };
 
   const currentSection = sectionTitles[activeSection] || sectionTitles.dashboard;
+
 
   return (
     <div className={`admin-layout admin-layout--${theme}${sidebarCollapsed ? " admin-layout--collapsed" : ""}`}>
@@ -311,7 +316,10 @@ const ws = new WebSocket(WS_URL);
 
               {showCustomers && <CustomersPanel searchQuery={searchQuery} />}
 
+              {showPricing && <PricingPanel />}
+
               {showPlaceholder && <PlaceholderPanel section={activeSection} />}
+
             </motion.div>
           </AnimatePresence>
         </main>

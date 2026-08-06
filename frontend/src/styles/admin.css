@@ -2831,3 +2831,219 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ─── Pricing Panel ─────────────────────────────────────── */
+.pricing-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.pricing-panel--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 0;
+  gap: 12px;
+  color: var(--admin-text-muted);
+}
+
+.pricing-panel__spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
+
+.pricing-panel__global-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--admin-radius);
+  color: #ef4444;
+  font-size: 14px;
+}
+
+.pricing-panel__retry-btn {
+  margin-left: auto;
+  padding: 6px 14px;
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.pricing-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.pricing-card {
+  background: var(--admin-card);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: var(--admin-shadow);
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.pricing-card:hover {
+  border-color: var(--admin-accent);
+}
+
+.pricing-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pricing-card__title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pricing-card__icon {
+  font-size: 24px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--admin-bg-alt);
+  border-radius: 12px;
+}
+
+.pricing-card__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--admin-text);
+}
+
+.pricing-card__desc {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--admin-text-muted);
+}
+
+.pricing-card__badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  background: rgba(34, 197, 94, 0.12);
+  color: #22c55e;
+  border-radius: 999px;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.pricing-card__body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.pricing-card__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pricing-card__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--admin-text-dim);
+}
+
+.pricing-card__input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.pricing-card__prefix {
+  position: absolute;
+  left: 12px;
+  color: var(--admin-text-muted);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.pricing-card__input {
+  width: 100%;
+  padding: 10px 12px 10px 28px;
+  background: var(--admin-input-bg, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius-sm, 8px);
+  color: var(--admin-text);
+  font-size: 15px;
+  font-weight: 700;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.pricing-card__input:focus {
+  border-color: var(--admin-accent);
+}
+
+.pricing-card__msg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pricing-card__msg--success {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.pricing-card__msg--error {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.pricing-card__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.pricing-card__save-btn {
+  padding: 10px 20px;
+  background: var(--admin-accent, #f97316);
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.1s ease;
+}
+
+.pricing-card__save-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.pricing-card__save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

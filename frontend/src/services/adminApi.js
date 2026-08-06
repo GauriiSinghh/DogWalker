@@ -3,7 +3,10 @@ import { API_BASE } from "../config/api";
 const API_URL = API_BASE;
 
 function authHeaders(json = false) {
-  const token = localStorage.getItem("adminToken");
+  const token =
+    localStorage.getItem("adminToken") ||
+    localStorage.getItem("admin_token") ||
+    localStorage.getItem("token");
   const headers = { Authorization: `Bearer ${token}` };
   if (json) headers["Content-Type"] = "application/json";
   return headers;
@@ -95,12 +98,32 @@ export const updateBooking = async (id, data) => {
   return parseResponse(response);
 };
 
-export const cancelBookingAdmin = async (bookingId, reason) => {
-  const response = await fetch(`${API_URL}/bookings/${bookingId}/cancel`, {
-    method: "POST",
-    headers: authHeaders(true),
-    body: JSON.stringify({ reason, cancelled_by: "admin" }),
+export const getAllAdminPricings = async () => {
+  const response = await fetch(`${API_URL}/admin/pricing`, {
+    headers: authHeaders(),
   });
   return parseResponse(response);
 };
 
+export const updateAdminPricing = async (service, data) => {
+  const response = await fetch(`${API_URL}/admin/pricing/${service}`, {
+    method: "PUT",
+    headers: authHeaders(true),
+    body: JSON.stringify(data),
+  });
+  return parseResponse(response);
+};
+
+
+export const cancelBookingAdmin = async (bookingId, reason) => {
+  const response = await fetch(`${API_URL}/bookings/${bookingId}/cancel`, {
+    method: "POST",
+    headers: authHeaders(true),
+    body: JSON.stringify({
+      reason,
+      cancelled_by: "admin",
+    }),
+  });
+
+  return parseResponse(response);
+};

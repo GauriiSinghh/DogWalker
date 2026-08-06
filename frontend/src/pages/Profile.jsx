@@ -5,6 +5,7 @@ import { FaTimes, FaUser, FaPaw, FaPlus, FaEdit, FaTrash } from "react-icons/fa"
 import { useAuth } from "../hooks/useAuth.js";
 import { useToast } from "../components/Toast.jsx";
 import { API_BASE } from "../config/api.js";
+import { cacheStore } from "../utils/cacheStore.js";
 import BookingHistoryPanel from "../components/BookingHistoryPanel.jsx";
 import AddPetModal from "../components/AddPetModal.jsx";
 import logo from "../assets/images/logo.png";
@@ -51,35 +52,57 @@ function Profile({ view = "profile" }) {
   const { updateUser } = useAuth();
   const toast = useToast();
 
-  const [profile, setProfile] = useState({
-    name: "",
-    email: "",
-    mobile: "",
-    apartment: "",
-    flatNo: "",
-    address: "",
-    pet_name: "",
-    pet_image: "",
+  const [profile, setProfile] = useState(() => {
+    const cached = cacheStore.get("profile");
+    return cached ? cached.data : {
+      name: "",
+      email: "",
+      mobile: "",
+      apartment: "",
+      flatNo: "",
+      address: "",
+      pet_name: "",
+      pet_image: "",
+    };
   });
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    const cached = cacheStore.get("profile");
+    return !cached;
+  });
   const [loadError, setLoadError] = useState("");
 
   const [editPersonal, setEditPersonal] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    mobile: "",
-    apartment: "",
-    flatNo: "",
-    address: "",
+  const [form, setForm] = useState(() => {
+    const cached = cacheStore.get("profile");
+    return cached ? {
+      name: cached.data.name || "",
+      email: cached.data.email || "",
+      mobile: cached.data.mobile || "",
+      apartment: cached.data.apartment || "",
+      flatNo: cached.data.flatNo || "",
+      address: cached.data.address || "",
+    } : {
+      name: "",
+      email: "",
+      mobile: "",
+      apartment: "",
+      flatNo: "",
+      address: "",
+    };
   });
   const [showErrors, setShowErrors] = useState(false);
   const [personalError, setPersonalError] = useState("");
   const [personalSuccess, setPersonalSuccess] = useState("");
 
-  const [pets, setPets] = useState([]);
-  const [petsLoading, setPetsLoading] = useState(false);
+  const [pets, setPets] = useState(() => {
+    const cached = cacheStore.get("pets");
+    return cached ? cached.data : [];
+  });
+  const [petsLoading, setPetsLoading] = useState(() => {
+    const cached = cacheStore.get("pets");
+    return !cached;
+  });
   const [petsError, setPetsError] = useState("");
   const [petSuccess, setPetSuccess] = useState("");
   const [petModalOpen, setPetModalOpen] = useState(false);
@@ -105,32 +128,72 @@ function Profile({ view = "profile" }) {
     [updateUser]
   );
 
-  const loadPets = useCallback(async () => {
-    setPetsLoading(true);
+  const loadPets = useCallback(async (silent = false) => {
+    if (!silent) {
+      const cached = cacheStore.get("pets");
+      if (cached) {
+        setPets(cached.data);
+        syncPrimaryPet(cached.data);
+        if (!cached.isStale) {
+          setPetsLoading(false);
+          return;
+        }
+        setPetsLoading(false);
+      } else {
+        setPetsLoading(true);
+      }
+    }
     setPetsError("");
 
     try {
-      const res = await fetch(`${API_BASE}/pets`, { headers: authHeaders() });
-      if (!res.ok) throw new Error(await readError(res, "Could not load pets"));
-      const data = await res.json();
-      const normalized = Array.isArray(data) ? data.map(normalizePet) : [];
-      setPets(normalized);
-      syncPrimaryPet(normalized);
+      const data = await cacheStore.getOrFetch("pets", async () => {
+        const res = await fetch(`${API_BASE}/pets`, { headers: authHeaders() });
+        if (!res.ok) throw new Error(await readError(res, "Could not load pets"));
+        const petsData = await res.json();
+        return Array.isArray(petsData) ? petsData.map(normalizePet) : [];
+      });
+
+      setPets(data);
+      syncPrimaryPet(data);
     } catch (err) {
-      setPetsError(err.message || "Could not load pets");
+      if (!cacheStore.get("pets")) {
+        setPetsError(err.message || "Could not load pets");
+      }
     } finally {
       setPetsLoading(false);
     }
   }, [syncPrimaryPet]);
 
-  const loadProfile = useCallback(async () => {
-    setLoading(true);
+  const loadProfile = useCallback(async (silent = false) => {
+    if (!silent) {
+      const cached = cacheStore.get("profile");
+      if (cached) {
+        setProfile(cached.data);
+        setForm({
+          name: cached.data.name || "",
+          email: cached.data.email || "",
+          mobile: cached.data.mobile || "",
+          apartment: cached.data.apartment || "",
+          flatNo: cached.data.flatNo || "",
+          address: cached.data.address || "",
+        });
+        if (!cached.isStale) {
+          setLoading(false);
+          return;
+        }
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+    }
     setLoadError("");
 
     try {
-      const res = await fetch(`${API_BASE}/profile`, { headers: authHeaders() });
-      if (!res.ok) throw new Error(await readError(res, "Could not load profile"));
-      const data = await res.json();
+      const data = await cacheStore.getOrFetch("profile", async () => {
+        const res = await fetch(`${API_BASE}/profile`, { headers: authHeaders() });
+        if (!res.ok) throw new Error(await readError(res, "Could not load profile"));
+        return res.json();
+      });
 
       setProfile(data);
       setForm({
@@ -153,7 +216,9 @@ function Profile({ view = "profile" }) {
         pet_image: data.pet_image || "",
       });
     } catch (err) {
-      setLoadError(err.message || "Could not load profile");
+      if (!cacheStore.get("profile")) {
+        setLoadError(err.message || "Could not load profile");
+      }
     } finally {
       setLoading(false);
     }
@@ -230,6 +295,7 @@ function Profile({ view = "profile" }) {
       const data = await res.json();
       const mergedData = { ...optimisticData, ...data };
 
+      cacheStore.delete("profile");
       setProfile(mergedData);
       updateUser({
         name: mergedData.name,
@@ -290,7 +356,8 @@ function Profile({ view = "profile" }) {
 
   async function handlePetSaved() {
     closePetModal();
-    await loadPets();
+    cacheStore.delete("pets");
+    await loadPets(true);
 
     setPetSuccess(petModalMode === "edit" ? "Pet updated!" : "Pet added!");
     setTimeout(() => setPetSuccess(""), 3000);
@@ -318,7 +385,8 @@ function Profile({ view = "profile" }) {
         throw new Error(await readError(res, "Could not delete pet"));
       }
 
-      await loadPets();
+      cacheStore.delete("pets");
+      await loadPets(true);
       setPetSuccess("Pet deleted!");
       setTimeout(() => setPetSuccess(""), 3000);
     } catch (err) {
@@ -346,7 +414,7 @@ function Profile({ view = "profile" }) {
     );
   }
 
-  if (loading && view === "profile") {
+  if (loading && !profile?.name && view === "profile") {
     return (
       <div className="auth-page">
         <div className="auth-card">

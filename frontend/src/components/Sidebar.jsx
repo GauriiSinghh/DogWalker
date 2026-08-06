@@ -5,6 +5,7 @@ import {
   CalendarDays,
   PersonStanding,
   Users,
+  Tag,
   Settings2,
   PanelLeftClose,
   PanelLeftOpen,
@@ -23,8 +24,10 @@ const NAV_ITEMS = [
   { id: "bookings", label: "Bookings", icon: CalendarDays },
   { id: "walkers", label: "Walkers", icon: PersonStanding },
   { id: "customers", label: "Customers", icon: Users },
+  { id: "pricing", label: "Pricing", icon: Tag },
   { id: "settings", label: "Settings", icon: Settings2 },
 ];
+
 
 function Tooltip({ label, show }) {
   if (!show || !label) return null;

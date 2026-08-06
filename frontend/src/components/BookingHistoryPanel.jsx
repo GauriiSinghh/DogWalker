@@ -10,6 +10,8 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { fetchMyBookings, cancelBooking, getBookingsWebSocketUrl } from "../services/bookingApi";
+import { cacheStore } from "../utils/cacheStore.js";
+import { useToast } from "./Toast.jsx";
 import CancellationModal from "./CancellationModal";
 import "../styles/booking-history.css";
 
@@ -69,8 +71,15 @@ function PaymentBadge({ status }) {
 }
 
 export default function BookingHistoryPanel() {
-  const [bookings, setBookings] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const toast = useToast();
+  const [bookings, setBookings] = useState(() => {
+    const cached = cacheStore.get("bookings");
+    return cached ? cached.data : [];
+  });
+  const [loading, setLoading] = useState(() => {
+    const cached = cacheStore.get("bookings");
+    return !cached;
+  });
   const [error, setError] = useState("");
   const [tab, setTab] = useState("One-Time");
   const [serviceFilter, setServiceFilter] = useState("all");
@@ -84,14 +93,32 @@ export default function BookingHistoryPanel() {
   const [selectedBookingForCancel, setSelectedBookingForCancel] = useState(null);
 
   const loadBookings = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    else setRefreshing(true);
+    if (!silent) {
+      const cached = cacheStore.get("bookings");
+      if (cached) {
+        setBookings(cached.data);
+        if (!cached.isStale) {
+          setLoading(false);
+          return;
+        }
+        setLoading(false);
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+    } else {
+      setRefreshing(true);
+    }
     setError("");
     try {
-      const data = await fetchMyBookings();
+      const data = await cacheStore.getOrFetch("bookings", async () => {
+        return fetchMyBookings();
+      });
       setBookings(data);
     } catch (err) {
-      setError(err.message || "Could not load bookings");
+      if (!cacheStore.get("bookings")) {
+        setError(err.message || "Could not load bookings");
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -149,13 +176,37 @@ export default function BookingHistoryPanel() {
   }, [loadBookings]);
 
   const onConfirmCancel = async (bookingId, reason, role) => {
+    const previousBookings = [...bookings];
+    setBookings((prev) =>
+      prev.map((b) =>
+        b.booking_id === bookingId
+          ? { ...b, status: "CANCELLED" }
+          : b
+      )
+    );
     setCancellingId(bookingId);
     setError("");
     try {
-      await cancelBooking(bookingId, reason, "customer");
-      await loadBookings(true);
+      const res = await cancelBooking(bookingId, reason, "customer");
+      cacheStore.delete("bookings");
+      setBookings((prev) =>
+        prev.map((b) =>
+          b.booking_id === bookingId
+            ? {
+                ...b,
+                status: res.status === "Cancelled" ? "CANCELLED" : res.status?.toUpperCase() || "CANCELLED",
+                cancellation_reason: reason,
+                cancelled_by: "customer",
+              }
+            : b
+        )
+      );
+      toast.success("Booking cancelled!");
     } catch (err) {
-      setError(err.message || "Could not cancel booking");
+      setBookings(previousBookings);
+      const errMsg = err.message || "Could not cancel booking";
+      setError(errMsg);
+      toast.error(`Cancellation failed: ${errMsg}`);
       throw err;
     } finally {
       setCancellingId(null);

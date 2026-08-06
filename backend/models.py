@@ -1,15 +1,19 @@
 import uuid
 
-from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, Float, Date, ForeignKey, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, Float, Date, ForeignKey, Index, func
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from db import Base
+
+
+def PortableUUID():
+    return PG_UUID(as_uuid=True).with_variant(String(36), "sqlite")
 
 
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    owner_id = Column(UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4)
+    owner_id = Column(PortableUUID(), unique=True, nullable=False, default=uuid.uuid4)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     name = Column(String, nullable=False)
@@ -30,7 +34,7 @@ class Pet(Base):
     __tablename__ = "pets"
 
     id = Column(Integer, primary_key=True, index=True)
-    pet_id = Column(UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4)
+    pet_id = Column(PortableUUID(), unique=True, nullable=False, default=uuid.uuid4)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String, nullable=False)
     image_url = Column(Text, nullable=True)
@@ -133,3 +137,116 @@ class Page(Base):
     file_url = Column(Text, nullable=False)
 
     created_at = Column(DateTime, server_default=func.now())
+
+
+class BasePricingModel(Base):
+    __abstract__ = True
+
+    id = Column(Integer, primary_key=True, index=True)
+    price = Column(Integer, nullable=False)
+    subscription_price = Column(Integer, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class WalkerPricing(BasePricingModel):
+    __tablename__ = "walker_pricings"
+    __table_args__ = (
+        Index(
+            "idx_walker_pricing_active",
+            "is_active",
+            unique=True,
+            postgresql_where=(Column("is_active") == True),
+            sqlite_where=(Column("is_active") == True),
+        ),
+    )
+
+
+class BoardingPricing(BasePricingModel):
+    __tablename__ = "boarding_pricings"
+    __table_args__ = (
+        Index(
+            "idx_boarding_pricing_active",
+            "is_active",
+            unique=True,
+            postgresql_where=(Column("is_active") == True),
+            sqlite_where=(Column("is_active") == True),
+        ),
+    )
+
+
+class GroomingPricing(BasePricingModel):
+    __tablename__ = "grooming_pricings"
+    __table_args__ = (
+        Index(
+            "idx_grooming_pricing_active",
+            "is_active",
+            unique=True,
+            postgresql_where=(Column("is_active") == True),
+            sqlite_where=(Column("is_active") == True),
+        ),
+    )
+
+
+class VetPricing(BasePricingModel):
+    __tablename__ = "vet_pricings"
+    __table_args__ = (
+        Index(
+            "idx_vet_pricing_active",
+            "is_active",
+            unique=True,
+            postgresql_where=(Column("is_active") == True),
+            sqlite_where=(Column("is_active") == True),
+        ),
+    )
+
+
+class VaccinationPricing(BasePricingModel):
+    __tablename__ = "vaccination_pricings"
+    __table_args__ = (
+        Index(
+            "idx_vaccination_pricing_active",
+            "is_active",
+            unique=True,
+            postgresql_where=(Column("is_active") == True),
+            sqlite_where=(Column("is_active") == True),
+        ),
+    )
+
+
+class PathologyPricing(BasePricingModel):
+    __tablename__ = "pathology_pricings"
+    __table_args__ = (
+        Index(
+            "idx_pathology_pricing_active",
+            "is_active",
+            unique=True,
+            postgresql_where=(Column("is_active") == True),
+            sqlite_where=(Column("is_active") == True),
+        ),
+    )
+
+
+class SitterPricing(BasePricingModel):
+    __tablename__ = "sitter_pricings"
+    __table_args__ = (
+        Index(
+            "idx_sitter_pricing_active",
+            "is_active",
+            unique=True,
+            postgresql_where=(Column("is_active") == True),
+            sqlite_where=(Column("is_active") == True),
+        ),
+    )
+
+
+PRICING_MODELS = {
+    "walker": WalkerPricing,
+    "boarding": BoardingPricing,
+    "grooming": GroomingPricing,
+    "vet": VetPricing,
+    "vaccination": VaccinationPricing,
+    "pathology": PathologyPricing,
+    "sitter": SitterPricing,
+}

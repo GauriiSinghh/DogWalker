@@ -14,8 +14,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
 
-from db import engine, get_db, Base
-from models import User, Pet, Walker, Booking, Page, Admin, FriendFamilyBooking
+from db import engine, get_db, Base, SessionLocal
+from models import User, Pet, Walker, Booking, Page, Admin, FriendFamilyBooking, PRICING_MODELS
+
 from schemas import (
     UserCreate, UserLogin, UserResponse, BookingRequest, BookingResponse, BookingUpdate,
     PageResponse, AdminLogin, WalkerResponse, WalkerCreate, WalkerDetailResponse,
@@ -27,12 +28,14 @@ from schemas import (
     WalkerLogin, WalkerProfileOut, WalkerProfileUpdate,
     WalkerAvailabilityUpdate, BookingStatusUpdate, WalkerUpdateAdmin, WalkerPasswordChange,
     PetCreate, PetUpdate, PetResponse, PetBrief,
+    PricingPublicResponse, PricingAdminResponse, PricingCreateUpdate,
 )
 from auth import (
     hash_password, verify_password, create_access_token,
     get_current_user, get_current_admin, get_authenticated_actor,
     get_current_walker,
 )
+
 from email_service import send_booking_email, send_user_confirmation_email
 from websocket_manager import manager
 
@@ -157,6 +160,7 @@ def init_database_tables():
             migrate_cancellation_fields()
             migrate_cancelled_by()
             migrate_user_pets()
+            seed_default_pricings()
 
             if attempt > 1:
                 logger.info("Database tables ready (attempt %s)", attempt)
@@ -205,6 +209,180 @@ app.add_middleware(
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
     return {"status": "ok", "message": "Paws Pal Connect API is running"}
+
+
+# ==========================================
+# Dynamic Pricing Management & Public APIs
+# ==========================================
+
+DEFAULT_SERVICE_PRICES = {
+    "walker": {"price": 299, "subscription_price": 249},
+    "boarding": {"price": 499, "subscription_price": 399},
+    "grooming": {"price": 599, "subscription_price": 499},
+    "vet": {"price": 399, "subscription_price": 349},
+    "vaccination": {"price": 349, "subscription_price": 299},
+    "pathology": {"price": 449, "subscription_price": 399},
+    "sitter": {"price": 299, "subscription_price": 249},
+}
+
+
+def seed_default_pricings(db: Session | None = None):
+    close_db = False
+    if db is None:
+        db = SessionLocal()
+        close_db = True
+    try:
+        for service_key, model_cls in PRICING_MODELS.items():
+            active_rec = db.query(model_cls).filter(model_cls.is_active == True).first()
+            if not active_rec:
+                defaults = DEFAULT_SERVICE_PRICES.get(service_key, {"price": 299, "subscription_price": 249})
+                new_p = model_cls(
+                    price=defaults["price"],
+                    subscription_price=defaults["subscription_price"],
+                    is_active=True,
+                )
+                db.add(new_p)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to seed default pricings")
+    finally:
+        if close_db:
+            db.close()
+
+
+
+VALID_SERVICES = set(PRICING_MODELS.keys())
+
+
+def _normalize_service_name(service: str) -> str:
+    s = service.strip().lower()
+    if s.endswith("_pricing"):
+        s = s[:-8]
+    if s not in VALID_SERVICES:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Service '{service}' not found. Valid services: {', '.join(sorted(VALID_SERVICES))}",
+        )
+    return s
+
+
+def _get_active_pricing(db: Session, service: str):
+    s_key = _normalize_service_name(service)
+    model_cls = PRICING_MODELS[s_key]
+    active = db.query(model_cls).filter(model_cls.is_active == True).first()
+    if not active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No active pricing found for service '{s_key}'",
+        )
+    return s_key, active
+
+
+@app.get("/pricing/{service}", response_model=PricingPublicResponse)
+def get_public_service_pricing(service: str, db: Session = Depends(get_db)):
+    _, active = _get_active_pricing(db, service)
+    return PricingPublicResponse(
+        price=active.price,
+        subscription_price=active.subscription_price,
+    )
+
+
+@app.get("/admin/pricing", response_model=dict[str, PricingAdminResponse])
+def get_all_admin_pricings(
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    result = {}
+    for service_key, model_cls in PRICING_MODELS.items():
+        active = db.query(model_cls).filter(model_cls.is_active == True).first()
+        if active:
+            result[service_key] = PricingAdminResponse(
+                id=active.id,
+                service=service_key,
+                price=active.price,
+                subscription_price=active.subscription_price,
+                is_active=active.is_active,
+                created_at=active.created_at,
+                updated_at=active.updated_at,
+            )
+    return result
+
+
+@app.get("/admin/pricing/{service}", response_model=PricingAdminResponse)
+def get_admin_service_pricing(
+    service: str,
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    s_key, active = _get_active_pricing(db, service)
+    return PricingAdminResponse(
+        id=active.id,
+        service=s_key,
+        price=active.price,
+        subscription_price=active.subscription_price,
+        is_active=active.is_active,
+        created_at=active.created_at,
+        updated_at=active.updated_at,
+    )
+
+
+def _set_active_pricing(db: Session, service: str, data: PricingCreateUpdate):
+    s_key = _normalize_service_name(service)
+    model_cls = PRICING_MODELS[s_key]
+
+    try:
+        db.query(model_cls).filter(model_cls.is_active == True).update(
+            {"is_active": False}, synchronize_session=False
+        )
+
+        new_pricing = model_cls(
+            price=data.price,
+            subscription_price=data.subscription_price,
+            is_active=True,
+        )
+        db.add(new_pricing)
+        db.commit()
+        db.refresh(new_pricing)
+
+        return PricingAdminResponse(
+            id=new_pricing.id,
+            service=s_key,
+            price=new_pricing.price,
+            subscription_price=new_pricing.subscription_price,
+            is_active=new_pricing.is_active,
+            created_at=new_pricing.created_at,
+            updated_at=new_pricing.updated_at,
+        )
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("Failed to update pricing for service %s", s_key)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Could not update pricing for service '{s_key}'",
+        ) from exc
+
+
+@app.put("/admin/pricing/{service}", response_model=PricingAdminResponse)
+def update_admin_service_pricing(
+    service: str,
+    data: PricingCreateUpdate,
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return _set_active_pricing(db, service, data)
+
+
+@app.post("/admin/pricing/{service}", response_model=PricingAdminResponse, status_code=status.HTTP_201_CREATED)
+def create_admin_service_pricing(
+    service: str,
+    data: PricingCreateUpdate,
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return _set_active_pricing(db, service, data)
+
+
 
 
 @app.post("/signup")

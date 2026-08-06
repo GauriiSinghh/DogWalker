@@ -67,14 +67,11 @@ function BookingChoice() {
               <button 
                 type="button"
                 className="choice-card"
-             onClick={() =>
-  navigate("/booking", {
-    state: {
-      mode: "self",
-      step: "pet",
-    },
-  })
-}
+                onClick={() =>
+                  navigate("/booking", {
+                    state: { mode: "self" },
+                  })
+                }
                 disabled={loading}
               >
                 <div className="choice-icon-wrap">

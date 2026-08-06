@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, model_validator, field_validator
 from typing import Optional
 from datetime import datetime, date
 from uuid import UUID
@@ -424,3 +424,40 @@ class MyBookingItem(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# =========================
+# Pricing Schemas
+# =========================
+class PricingPublicResponse(BaseModel):
+    price: int
+    subscription_price: int
+
+    class Config:
+        from_attributes = True
+
+
+class PricingAdminResponse(BaseModel):
+    id: int
+    service: str
+    price: int
+    subscription_price: int
+    is_active: bool
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class PricingCreateUpdate(BaseModel):
+    price: int
+    subscription_price: int
+    is_active: Optional[bool] = True
+
+    @field_validator("price", "subscription_price")
+    @classmethod
+    def validate_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("Price must be a non-negative number")
+        return v
