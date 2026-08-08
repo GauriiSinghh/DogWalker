@@ -11,6 +11,7 @@ import {
   Tooltip,
 } from "recharts";
 import { getDailyRevenue } from "../services/dashboardApi";
+import { cacheStore } from "../utils/cacheStore.js";
 
 const ACCENT = "#f97316"; // existing orange accent
 const ACCENT_LIGHT = "#ffb347";
@@ -34,17 +35,32 @@ function CustomTooltip({ active, payload, label }) {
 }
 
 export default function RevenueChart({ days = 30 }) {
-  const [data, setData] = useState([]);
+  const cacheKey = useMemo(() => `dashboard-revenue:${days}`, [days]);
+  const cached = cacheStore.get(cacheKey);
+  const [data, setData] = useState(() => (cached ? cached.data : []));
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !cacheStore.get(cacheKey));
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    getDailyRevenue(days)
+    const cachedEntry = cacheStore.get(cacheKey);
+
+    if (cachedEntry) {
+      setData(Array.isArray(cachedEntry.data) ? cachedEntry.data : []);
+      setError("");
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
+    cacheStore
+      .getOrFetch(cacheKey, async () => {
+        const rows = await getDailyRevenue(days);
+        return Array.isArray(rows) ? rows : [];
+      }, 300000)
       .then((rows) => {
         if (active) {
-          setData(Array.isArray(rows) ? rows : []);
+          setData(rows);
           setError("");
         }
       })
@@ -54,10 +70,11 @@ export default function RevenueChart({ days = 30 }) {
       .finally(() => {
         if (active) setLoading(false);
       });
+
     return () => {
       active = false;
     };
-  }, [days]);
+  }, [cacheKey, days]);
 
   const rangeLabel = useMemo(() => `Last ${days} days`, [days]);
 

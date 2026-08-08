@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import StatusBadge from "./StatusBadge";
 import {
   createWalker,
@@ -7,7 +7,8 @@ import {
   updateWalker,
   validateWalkerUnique,
 } from "../services/walkersApi";
-import "../styles/walkers.css";
+import { cacheStore } from "../utils/cacheStore.js";
+import "../styles/admin.css";
 
 const emptyForm = {
   name: "",
@@ -44,8 +45,11 @@ function deriveWalkerStatus(w) {
 }
 
 export default function WalkersPanel({ searchQuery = "" }) {
-  const [walkers, setWalkers] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [walkers, setWalkers] = useState(() => {
+    const cached = cacheStore.get("admin-walkers");
+    return cached ? cached.data : [];
+  });
+  const [loading, setLoading] = useState(() => !cacheStore.get("admin-walkers"));
 
   const [showForm, setShowForm] = useState(false);
   const [formKey, setFormKey] = useState(Date.now());
@@ -56,19 +60,30 @@ export default function WalkersPanel({ searchQuery = "" }) {
 
   const uniqTimer = useRef(null);
 
-  async function refresh() {
-    setLoading(true);
+  const refresh = useCallback(async (silent = false) => {
+    if (!silent) {
+      const cached = cacheStore.get("admin-walkers");
+      if (cached) {
+        setWalkers(Array.isArray(cached.data) ? cached.data : []);
+        if (!cached.isStale) {
+          setLoading(false);
+          return;
+        }
+      } else {
+        setLoading(true);
+      }
+    }
     try {
-      const data = await getWalkers();
+      const data = await cacheStore.getOrFetch("admin-walkers", async () => getWalkers(), 300000);
       setWalkers(Array.isArray(data) ? data : []);
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
-    refresh();
-  }, []);
+    void refresh();
+  }, [refresh]);
 
   // when opening create form: hard-reset + force remount to kill autofill
   function openCreate() {
@@ -226,56 +241,49 @@ export default function WalkersPanel({ searchQuery = "" }) {
   }
 
   return (
-    <div className="walkers">
-      <div className="walkers__top">
-        <div className="walkers__search">
-          <label className="walkers__label">Search Walker</label>
-          <input
-            className="walkers__input"
-            value={searchQuery}
-            readOnly
-            placeholder="Use dashboard search…"
-          />
-        </div>
-
-        <div className="walkers__count">
-          <div className="walkers__label">Total Walkers</div>
-          <div className="walkers__countValue">{totalCount}</div>
-        </div>
-
-        <div className="walkers__actions">
-          <button className="walkers__btn walkers__btn--primary" onClick={openCreate}>
-            + Add Walker
-          </button>
-        </div>
-      </div>
-
-      {showForm && (
-        <form
-          key={formKey}
-          className="walkers__form"
-          onSubmit={onSave}
-          autoComplete="off"
-        >
-          <div className="walkers__formHeader">
-            <div>
-              <h3 className="walkers__formTitle">{editing ? "Edit Walker" : "Add Walker"}</h3>
-              {errors.form && <div className="walkers__formError">{errors.form}</div>}
-            </div>
-            <button
-              type="button"
-              className="walkers__btn walkers__btn--ghost"
-              onClick={() => setShowForm(false)}
-            >
-              Close
+    <div className="admin-entity-panel">
+      <div className="admin-table-card">
+        <div className="admin-table-card__header">
+          <div>
+            <h2 className="admin-table-card__title">Walkers</h2>
+            <p className="admin-table-card__count">{totalCount} active profiles</p>
+          </div>
+          <div className="admin-entity-panel__actions">
+            <button className="admin-btn admin-btn--primary" onClick={openCreate} type="button">
+              + Add Walker
             </button>
           </div>
+        </div>
 
-          <div className="walkers__grid">
+        <div className="admin-entity-panel__actions" style={{ padding: "16px 24px 0" }}>
+          <div style={{ flex: 1 }}>
+            <label className="walkers__label">Search Walker</label>
+            <input
+              className="admin-entity-form__input"
+              value={searchQuery}
+              readOnly
+              placeholder="Use dashboard search…"
+              style={{ width: "100%" }}
+            />
+          </div>
+          <div style={{ minWidth: 140 }}>
+            <div className="walkers__label">Total Walkers</div>
+            <div className="walkers__countValue">{totalCount}</div>
+          </div>
+        </div>
+
+        {showForm && (
+          <form
+            key={formKey}
+            className="admin-entity-form"
+            onSubmit={onSave}
+            autoComplete="off"
+            style={{ padding: "16px 24px 24px", gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}
+          >
             <div>
               <label className="walkers__label">Walker Name *</label>
               <input
-                className="walkers__input"
+                className="admin-entity-form__input"
                 value={form.name}
                 onChange={(e) => {
                   setField("name", e.target.value);
@@ -290,7 +298,7 @@ export default function WalkersPanel({ searchQuery = "" }) {
             <div>
               <label className="walkers__label">Email *</label>
               <input
-                className="walkers__input"
+                className="admin-entity-form__input"
                 value={form.email}
                 onChange={(e) => {
                   setField("email", e.target.value);
@@ -304,9 +312,9 @@ export default function WalkersPanel({ searchQuery = "" }) {
             </div>
 
             <div>
-              <label className="walkers__label">Password {editing ? "(optional)" : "*"} </label>
+              <label className="walkers__label">Password {editing ? "(optional)" : "*"}</label>
               <input
-                className="walkers__input"
+                className="admin-entity-form__input"
                 value={form.password}
                 onChange={(e) => setField("password", e.target.value)}
                 type="password"
@@ -319,7 +327,7 @@ export default function WalkersPanel({ searchQuery = "" }) {
             <div>
               <label className="walkers__label">Mobile Number *</label>
               <input
-                className="walkers__input"
+                className="admin-entity-form__input"
                 value={form.mobile_number}
                 onChange={(e) => {
                   setField("mobile_number", e.target.value);
@@ -332,10 +340,10 @@ export default function WalkersPanel({ searchQuery = "" }) {
               {errors.mobile_number && <div className="walkers__error">{errors.mobile_number}</div>}
             </div>
 
-            <div className="walkers__gridSpan2">
+            <div style={{ gridColumn: "1 / -1" }}>
               <label className="walkers__label">Address *</label>
               <input
-                className="walkers__input"
+                className="admin-entity-form__input"
                 value={form.address}
                 onChange={(e) => setField("address", e.target.value)}
                 name="walker-address"
@@ -344,53 +352,55 @@ export default function WalkersPanel({ searchQuery = "" }) {
               {errors.address && <div className="walkers__error">{errors.address}</div>}
             </div>
 
-            <div className="walkers__gridSpan2">
+            <div style={{ gridColumn: "1 / -1" }}>
               <label className="walkers__label">Profile Image URL (optional)</label>
               <input
-                className="walkers__input"
+                className="admin-entity-form__input"
                 value={form.profile_image}
                 onChange={(e) => setField("profile_image", e.target.value)}
                 name="walker-profile-image"
                 autoComplete="off"
               />
             </div>
-          </div>
 
-          <div className="walkers__formButtons">
-            <button className="walkers__btn walkers__btn--primary" type="submit" disabled={saving}>
-              {saving ? "Saving…" : "Save Walker"}
-            </button>
-            <button className="walkers__btn" type="button" onClick={resetForm} disabled={saving}>
-              Reset
-            </button>
-          </div>
-        </form>
-      )}
+            <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setShowForm(false)} disabled={saving}>
+                Close
+              </button>
+              <button className="admin-btn admin-btn--primary" type="submit" disabled={saving}>
+                {saving ? "Saving…" : "Save Walker"}
+              </button>
+              <button className="admin-btn admin-btn--ghost" type="button" onClick={resetForm} disabled={saving}>
+                Reset
+              </button>
+            </div>
+            {errors.form && <div className="admin-entity-panel__error" style={{ gridColumn: "1 / -1" }}>{errors.form}</div>}
+          </form>
+        )}
 
-      <div className="walkers__tableWrap">
-        <table className="walkers__table">
-          <thead>
-            <tr>
-              <th>Profile</th>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Mobile</th>
-              <th>Address</th>
-              
-              <th>Current Booking</th>
-              <th>Status</th>
-              <th>Created</th>
-              <th style={{ width: 160 }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan="10" className="walkers__muted">Loading…</td></tr>
-            ) : filtered.length === 0 ? (
-              <tr><td colSpan="10" className="walkers__muted">No walkers found.</td></tr>
-            ) : (
-              filtered.map((w) => {
-                const st = deriveWalkerStatus(w);
+        <div className="admin-table-scroll admin-table-desktop">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Profile</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Mobile</th>
+                <th>Address</th>
+                <th>Current Booking</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th className="admin-table__th-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && !cacheStore.get("admin-walkers") ? (
+                <tr><td colSpan="9" className="admin-entity-panel__hint">Loading…</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan="9" className="admin-entity-panel__hint">No walkers found.</td></tr>
+              ) : (
+                filtered.map((w) => {
+                  const st = deriveWalkerStatus(w);
                 return (
                   <tr key={w.id}>
                     <td>
@@ -437,6 +447,7 @@ export default function WalkersPanel({ searchQuery = "" }) {
             )}
           </tbody>
         </table>
+      </div>
       </div>
     </div>
   );

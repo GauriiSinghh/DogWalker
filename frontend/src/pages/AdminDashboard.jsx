@@ -1,7 +1,8 @@
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FiSearch, FiMenu, FiUsers, FiUser, FiSettings } from "react-icons/fi";
 import { getBookings, updateBooking } from "../services/adminApi";
+import { cacheStore } from "../utils/cacheStore.js";
 import Sidebar from "../components/Sidebar";
 import StatsCards from "../components/StatsCards";
 import BookingTable from "../components/BookingTable";
@@ -72,52 +73,79 @@ function PlaceholderPanel({ section }) {
 
 export default function AdminDashboard() {
   const { theme, toggleTheme } = useAdminTheme();
-  const [bookings, setBookings] = useState([]);
-  const [revenue, setRevenue] = useState(null);
-  const [stats, setStats] = useState(null);
+  const [bookings, setBookings] = useState(() => {
+    const cached = cacheStore.get("admin-dashboard-bookings");
+    return cached?.data?.bookings || [];
+  });
+  const [revenue, setRevenue] = useState(() => {
+    const cached = cacheStore.get("admin-dashboard-revenue");
+    return cached?.data || null;
+  });
+  const [stats, setStats] = useState(() => {
+    const cached = cacheStore.get("admin-dashboard-stats");
+    return cached?.data || null;
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSection, setActiveSection] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  
 
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [totalPages, setTotalPages] = useState(() => {
+    const cached = cacheStore.get("admin-dashboard-bookings");
+    return cached?.data?.total_pages || 1;
+  });
 
-const fetchBookings = (currentPage = page) => {
-  getBookings(currentPage, 10)
-    .then((data) => {
-      setBookings(data.bookings);
-      setTotalPages(data.total_pages);
-    })
-    .catch((err) => {
+  const fetchBookings = useCallback(async (currentPage = page) => {
+    const cacheKey = `admin-dashboard-bookings:${currentPage}`;
+    const cached = cacheStore.get(cacheKey);
+    if (cached) {
+      setBookings(cached.data?.bookings || []);
+      setTotalPages(cached.data?.total_pages || 1);
+    }
+
+    try {
+      const data = await cacheStore.getOrFetch(cacheKey, async () => getBookings(currentPage, 10), 300000);
+      setBookings(data?.bookings || []);
+      setTotalPages(data?.total_pages || 1);
+    } catch (err) {
       console.error(err);
-    });
-};
-
-  const fetchRevenue = () => {
-    getTotalRevenue()
-      .then((data) => {
-        setRevenue(data);
-      })
-      .catch((err) => {
-        console.error(err);
-      });
-    };
-  const fetchStats = () => {
-    getDashboardStats()
-      .then((data) => {
-        setStats(data);
-      })
-      .catch((err) => {
-        console.error(err);
-      });
-  };
-  useEffect(() => {
-    fetchBookings();
-    fetchRevenue();
-    fetchStats();
+    }
   }, [page]);
+
+  const fetchRevenue = useCallback(async () => {
+    const cached = cacheStore.get("admin-dashboard-revenue");
+    if (cached) {
+      setRevenue(cached.data || null);
+    }
+
+    try {
+      const data = await cacheStore.getOrFetch("admin-dashboard-revenue", async () => getTotalRevenue(), 300000);
+      setRevenue(data || null);
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+
+  const fetchStats = useCallback(async () => {
+    const cached = cacheStore.get("admin-dashboard-stats");
+    if (cached) {
+      setStats(cached.data || null);
+    }
+
+    try {
+      const data = await cacheStore.getOrFetch("admin-dashboard-stats", async () => getDashboardStats(), 300000);
+      setStats(data || null);
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchBookings(page);
+    void fetchRevenue();
+    void fetchStats();
+  }, [page, fetchBookings, fetchRevenue, fetchStats]);
 
   useEffect(() => {
   const WS_URL =
@@ -136,9 +164,12 @@ const ws = new WebSocket(WS_URL);
 
     console.log("📩 WS Message:", data);
 
-    fetchBookings(); // refresh bookings automatically
-    fetchStats();
-    fetchRevenue();
+    cacheStore.delete(`admin-dashboard-bookings:${page}`);
+    cacheStore.delete("admin-dashboard-stats");
+    cacheStore.delete("admin-dashboard-revenue");
+    void fetchBookings(page);
+    void fetchStats();
+    void fetchRevenue();
   };
 
   ws.onclose = () => {
@@ -161,9 +192,12 @@ const ws = new WebSocket(WS_URL);
 
   const updateBookingRecord = async (id, data) => {
     await updateBooking(id, data);
-    fetchBookings();
-    fetchStats();
-    fetchRevenue();
+    cacheStore.delete(`admin-dashboard-bookings:${page}`);
+    cacheStore.delete("admin-dashboard-stats");
+    cacheStore.delete("admin-dashboard-revenue");
+    await fetchBookings(page);
+    await fetchStats();
+    await fetchRevenue();
   };
 
   const filteredBookings = useMemo(() => {

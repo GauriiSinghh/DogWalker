@@ -1,5 +1,5 @@
 // src/pages/Booking.jsx
-import { useState, useEffect, useRef} from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { FaTimes } from "react-icons/fa";
@@ -51,13 +51,7 @@ function Booking() {
   const [confirmed, setConfirmed] = useState(null);
   const [currentStep, setCurrentStep] = useState(() => {
     if (prefillSelf) {
-      const hasRequiredDetails =
-        user?.apartment &&
-        user?.name?.trim()?.length >= 2 &&
-        /^(\+91|91)?[6-9]\d{9}$/.test(user?.mobile?.trim() || "") &&
-        user?.flatNo?.trim() &&
-        user?.address?.trim()?.length >= 10;
-      return hasRequiredDetails ? "pet" : "details";
+      return "pet";
     }
     return location.state?.step || "details";
   });
@@ -68,28 +62,32 @@ function Booking() {
     prefillSelf && user?.apartment ? APARTMENT_PRICES[user.apartment] ?? null : null
   );
   const [submitting, setSubmitting] = useState(false);
+  const returnTo = location.state?.returnTo || "/";
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
-  // Keep "Book for myself" fields in sync with the live context if it changes
-  // (e.g. user edited their profile right before navigating here).
-  useEffect(() => {
-    if (!prefillSelf || !user) return;
-    setApartment(user.apartment || "");
-    setName(user.name || "");
-    setMobile(user.mobile || "");
-    setFlatNo(user.flatNo || "");
-    setAddress(user.address || "");
-    setBookingAmount(
-      user.apartment ? APARTMENT_PRICES[user.apartment] ?? null : null
-    );
-  }, [prefillSelf, user]);
-
   useEffect(() => {
     async function loadProfile() {
       if (!prefillSelf) return;
+
+      const hasSavedDetails =
+        user?.apartment &&
+        user?.name?.trim()?.length >= 2 &&
+        /^(\+91|91)?[6-9]\d{9}$/.test(user?.mobile?.trim() || "") &&
+        user?.flatNo?.trim() &&
+        user?.address?.trim()?.length >= 10;
+
+      if (hasSavedDetails) {
+        setApartment(user.apartment || "");
+        setName(user.name || "");
+        setMobile(user.mobile || "");
+        setFlatNo(user.flatNo || "");
+        setAddress(user.address || "");
+        setBookingAmount(user.apartment ? APARTMENT_PRICES[user.apartment] ?? null : null);
+        return;
+      }
 
       try {
         const token = localStorage.getItem("token");
@@ -112,7 +110,6 @@ function Booking() {
             data.apartment ? APARTMENT_PRICES[data.apartment] ?? null : null
           );
 
-          // Sync global context so other screens stay consistent.
           updateUser({
             name: data.name || "",
             email: data.email || user?.email || "",
@@ -128,7 +125,7 @@ function Booking() {
     }
 
     loadProfile();
-  }, [prefillSelf]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [prefillSelf, user, updateUser]);
 
   function validateForm() {
     setError("");
@@ -205,6 +202,14 @@ function Booking() {
   }
 
   // Direct book + pay for self-bookings (called from SelectPetStep)
+  const handleSelectPetBack = useCallback(() => {
+    if (prefillSelf) {
+      navigate(returnTo, { replace: true });
+      return;
+    }
+    setCurrentStep("details");
+  }, [navigate, prefillSelf, returnTo]);
+
   async function handleBookAndPay(pet) {
     setSubmitting(true);
     setError("");
@@ -541,7 +546,7 @@ onClick={()=>{
       <SelectPetStep
         selectedPetId={selectedPet?.id}
         onSelectPet={setSelectedPet}
-        onBack={() => setCurrentStep("details")}
+        onBack={handleSelectPetBack}
         onContinue={(pet) => handleBookAndPay(pet)}
         submitting={submitting}
       />

@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { FiDollarSign, FiCheckCircle, FiAlertCircle, FiRefreshCw } from "react-icons/fi";
 import { getAllAdminPricings, updateAdminPricing } from "../services/adminApi";
+import { cacheStore } from "../utils/cacheStore.js";
 import "../styles/admin.css";
 
 const SERVICES = [
@@ -14,18 +15,53 @@ const SERVICES = [
 ];
 
 export default function PricingPanel() {
-  const [pricings, setPricings] = useState({});
-  const [formState, setFormState] = useState({});
-  const [loading, setLoading] = useState(true);
+  const [pricings, setPricings] = useState(() => {
+    const cached = cacheStore.get("admin-pricings");
+    return cached ? cached.data : {};
+  });
+  const [formState, setFormState] = useState(() => {
+    const cached = cacheStore.get("admin-pricings");
+    const initial = {};
+    if (!cached?.data) return initial;
+    SERVICES.forEach(({ key }) => {
+      const item = cached.data?.[key] || {};
+      initial[key] = {
+        price: item.price !== undefined ? String(item.price) : "",
+        subscription_price: item.subscription_price !== undefined ? String(item.subscription_price) : "",
+      };
+    });
+    return initial;
+  });
+  const [loading, setLoading] = useState(() => !cacheStore.get("admin-pricings"));
   const [savingKey, setSavingKey] = useState(null);
   const [messages, setMessages] = useState({});
   const [globalError, setGlobalError] = useState("");
 
-  const loadPricings = async () => {
-    setLoading(true);
+  const loadPricings = useCallback(async (silent = false) => {
+    if (!silent) {
+      const cached = cacheStore.get("admin-pricings");
+      if (cached) {
+        setPricings(cached.data || {});
+        const initialForm = {};
+        SERVICES.forEach(({ key }) => {
+          const item = cached.data?.[key] || {};
+          initialForm[key] = {
+            price: item.price !== undefined ? String(item.price) : "",
+            subscription_price: item.subscription_price !== undefined ? String(item.subscription_price) : "",
+          };
+        });
+        setFormState(initialForm);
+        if (!cached.isStale) {
+          setLoading(false);
+          return;
+        }
+      } else {
+        setLoading(true);
+      }
+    }
     setGlobalError("");
     try {
-      const data = await getAllAdminPricings();
+      const data = await cacheStore.getOrFetch("admin-pricings", async () => getAllAdminPricings(), 300000);
       setPricings(data || {});
       const initialForm = {};
       SERVICES.forEach(({ key }) => {
@@ -37,15 +73,17 @@ export default function PricingPanel() {
       });
       setFormState(initialForm);
     } catch (err) {
-      setGlobalError(err.message || "Failed to load pricing configurations");
+      if (!cacheStore.get("admin-pricings")) {
+        setGlobalError(err.message || "Failed to load pricing configurations");
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadPricings();
-  }, []);
+    void loadPricings();
+  }, [loadPricings]);
 
   const handleChange = (key, field, value) => {
     setFormState((prev) => ({
@@ -119,7 +157,9 @@ export default function PricingPanel() {
     }
   };
 
-  if (loading) {
+  const showInitialLoading = loading && !cacheStore.get("admin-pricings");
+
+  if (showInitialLoading) {
     return (
       <div className="pricing-panel pricing-panel--loading">
         <FiRefreshCw className="pricing-panel__spinner" size={24} />

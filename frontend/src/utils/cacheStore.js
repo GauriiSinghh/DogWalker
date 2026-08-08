@@ -57,6 +57,14 @@ export const cacheStore = {
    * @returns {Promise<any>}
    */
   getOrFetch(key, fetchFn, ttl = 300000) {
+    const cached = cache.get(key);
+    if (cached) {
+      const isExpired = Date.now() - cached.timestamp > cached.ttl;
+      if (!isExpired) {
+        return Promise.resolve(cached.data);
+      }
+    }
+
     if (inFlightRequests.has(key)) {
       return inFlightRequests.get(key);
     }

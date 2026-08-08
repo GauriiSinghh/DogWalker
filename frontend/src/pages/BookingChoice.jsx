@@ -69,7 +69,8 @@ function BookingChoice() {
                 className="choice-card"
                 onClick={() =>
                   navigate("/booking", {
-                    state: { mode: "self" },
+                    replace: true,
+                    state: { mode: "self", returnTo: "/" },
                   })
                 }
                 disabled={loading}

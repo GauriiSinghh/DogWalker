@@ -414,7 +414,9 @@ function Profile({ view = "profile" }) {
     );
   }
 
-  if (loading && !profile?.name && view === "profile") {
+  const showInitialProfileSkeleton = loading && !profile?.name && view === "profile" && !cacheStore.get("profile");
+
+  if (showInitialProfileSkeleton) {
     return (
       <div className="auth-page">
         <div className="auth-card">

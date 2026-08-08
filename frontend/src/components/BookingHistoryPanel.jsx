@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { memo, useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -47,28 +47,28 @@ function fmtMoney(amount) {
   return `₹${Number(amount).toLocaleString("en-IN")}`;
 }
 
-function ServiceIcon({ type }) {
+const ServiceIcon = memo(function ServiceIcon({ type }) {
   const Icon = SERVICE_ICONS[type] || Footprints;
   return (
     <div className="bh-service-icon">
       <Icon size={22} strokeWidth={2} />
     </div>
   );
-}
+});
 
-function StatusBadge({ status }) {
+const StatusBadge = memo(function StatusBadge({ status }) {
   const cls = STATUS_CLASS[status] || "bh-badge--pending";
   return <span className={`bh-badge ${cls}`}>{status}</span>;
-}
+});
 
-function PaymentBadge({ status }) {
+const PaymentBadge = memo(function PaymentBadge({ status }) {
   const paid = status === "PAID";
   return (
     <span className={`bh-badge ${paid ? "bh-badge--paid" : "bh-badge--unpaid"}`}>
       {paid ? "Paid" : "Pending"}
     </span>
   );
-}
+});
 
 export default function BookingHistoryPanel() {
   const toast = useToast();
@@ -89,6 +89,7 @@ export default function BookingHistoryPanel() {
   const [expandedId, setExpandedId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [cancellingId, setCancellingId] = useState(null);
+  const [optimisticCancelIds, setOptimisticCancelIds] = useState(new Set());
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [selectedBookingForCancel, setSelectedBookingForCancel] = useState(null);
 
@@ -177,6 +178,8 @@ export default function BookingHistoryPanel() {
 
   const onConfirmCancel = async (bookingId, reason, role) => {
     const previousBookings = [...bookings];
+    const previousCancelIds = new Set(optimisticCancelIds);
+    setOptimisticCancelIds((prev) => new Set(prev).add(bookingId));
     setBookings((prev) =>
       prev.map((b) =>
         b.booking_id === bookingId
@@ -204,12 +207,18 @@ export default function BookingHistoryPanel() {
       toast.success("Booking cancelled!");
     } catch (err) {
       setBookings(previousBookings);
+      setOptimisticCancelIds(previousCancelIds);
       const errMsg = err.message || "Could not cancel booking";
       setError(errMsg);
       toast.error(`Cancellation failed: ${errMsg}`);
       throw err;
     } finally {
       setCancellingId(null);
+      setOptimisticCancelIds((prev) => {
+        const next = new Set(prev);
+        next.delete(bookingId);
+        return next;
+      });
     }
   };
 
@@ -242,7 +251,9 @@ export default function BookingHistoryPanel() {
     [bookings]
   );
 
-  if (loading) {
+  const showInitialSkeleton = loading && !cacheStore.get("bookings");
+
+  if (showInitialSkeleton) {
     return (
       <div className="bh-page">
         {[1, 2, 3].map((i) => (
@@ -496,13 +507,13 @@ export default function BookingHistoryPanel() {
                     <button
                       type="button"
                       className="bh-action-btn bh-action-btn--danger"
-                      disabled={cancellingId === b.booking_id}
+                      disabled={optimisticCancelIds.has(b.booking_id) || cancellingId === b.booking_id}
                       onClick={() => {
                         setSelectedBookingForCancel(b);
                         setShowCancelModal(true);
                       }}
                     >
-                      {cancellingId === b.booking_id ? "Cancelling…" : "Cancel"}
+                      {optimisticCancelIds.has(b.booking_id) || cancellingId === b.booking_id ? "Cancelling…" : "Cancel"}
                     </button>
                   )}
                   {b.status === "COMPLETED" && b.walker && (

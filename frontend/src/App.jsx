@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { AuthProvider } from "./components/AuthContext.jsx";
@@ -12,9 +13,10 @@ import BookingChoice from "./pages/BookingChoice.jsx";
 import PrivacyPolicy from "./pages/PrivacyPolicy.jsx";
 import TermsConditions from "./pages/TermsConditions.jsx";
 import RefundCancellationPolicy from "./pages/RefundCancellationPolicy.jsx";
-import AdminDashboard from "./pages/AdminDashboard.jsx";
 import AdminProtectedRoute from "./components/AdminProtectedRoute.jsx";
 import Profile from "./pages/Profile.jsx";
+
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard.jsx"));
 
 function App() {
   const location = useLocation();
@@ -39,6 +41,7 @@ function App() {
         {!hideNavbar && !isPolicyPage && <Navbar />}
 
         <AnimatePresence mode="wait">
+          <Suspense fallback={<div className="auth-page"><div className="auth-card"><div className="auth-body" style={{padding:"24px"}}>Loading dashboard…</div></div></div>}>
           <Routes location={location} key={location.pathname}>
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
@@ -107,6 +110,7 @@ function App() {
             <Route path="/policy/terms-and-conditions" element={<TermsConditions />} />
             <Route path="/policy/cancellation&refund-policy" element={<RefundCancellationPolicy />} />
           </Routes>
+          </Suspense>
         </AnimatePresence>
       </ToastProvider>
     </AuthProvider>

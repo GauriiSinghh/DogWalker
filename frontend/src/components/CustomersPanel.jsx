@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { FiEye, FiX } from "react-icons/fi";
 import StatusBadge from "./StatusBadge";
 import ImageLightbox from "./ImageLightbox";
 import { getCustomers, getCustomerDetail } from "../services/adminApi";
+import { cacheStore } from "../utils/cacheStore.js";
 
 function CustomerDetailModal({ customer, onClose }) {
   if (!customer) return null;
@@ -106,20 +107,44 @@ function CustomerDetailModal({ customer, onClose }) {
 }
 
 export default function CustomersPanel({ searchQuery = "" }) {
-  const [customers, setCustomers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [customers, setCustomers] = useState(() => {
+    const cached = cacheStore.get("admin-customers");
+    return cached ? cached.data : [];
+  });
+  const [loading, setLoading] = useState(() => !cacheStore.get("admin-customers"));
   const [error, setError] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
-  useEffect(() => {
-    setLoading(true);
+  const loadCustomers = useCallback(async (silent = false) => {
+    if (!silent) {
+      const cached = cacheStore.get("admin-customers");
+      if (cached) {
+        setCustomers(Array.isArray(cached.data) ? cached.data : []);
+        if (!cached.isStale) {
+          setLoading(false);
+          return;
+        }
+      } else {
+        setLoading(true);
+      }
+    }
     setError("");
-    getCustomers()
-      .then((data) => setCustomers(Array.isArray(data) ? data : []))
-      .catch((err) => setError(err.message || "Could not load customers"))
-      .finally(() => setLoading(false));
+    try {
+      const data = await cacheStore.getOrFetch("admin-customers", async () => getCustomers(), 300000);
+      setCustomers(Array.isArray(data) ? data : []);
+    } catch (err) {
+      if (!cacheStore.get("admin-customers")) {
+        setError(err.message || "Could not load customers");
+      }
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadCustomers();
+  }, [loadCustomers]);
 
   const filteredCustomers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -158,7 +183,7 @@ export default function CustomersPanel({ searchQuery = "" }) {
 
         {error && <div className="admin-entity-panel__error">{error}</div>}
 
-        {loading ? (
+        {loading && !cacheStore.get("admin-customers") ? (
           <p className="admin-entity-panel__hint">Loading customers...</p>
         ) : filteredCustomers.length === 0 ? (
           <div className="admin-table__empty">
