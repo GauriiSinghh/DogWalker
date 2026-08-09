@@ -5,13 +5,24 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 load_dotenv()
 
-# Use SQLite
-DATABASE_URL = "sqlite:///./walkers.db"
+def normalize_database_url(url: str) -> str:
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    url = url.replace("&channel_binding=require", "")
+    url = url.replace("?channel_binding=require&", "?")
+    url = url.replace("?channel_binding=require", "")
+    return url
+
+DATABASE_URL = normalize_database_url(
+    os.getenv("DATABASE_URL", "postgresql://postgres:gauri2442@localhost:5432/dogwalking_db")
+)
 print("databse url=", DATABASE_URL)
 
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False}
+    pool_pre_ping=True,
+    pool_recycle=300,
+    connect_args={"connect_timeout": 15},
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

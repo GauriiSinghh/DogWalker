@@ -1874,7 +1874,7 @@ def walker_register(
     """
     Register a new walker.
     
-    - Checks if email, mobile number, or name already exists
+    - Checks if email or mobile number already exists
     - Hashes the password
     - Creates a new walker account
     - Returns the created walker profile
@@ -1899,15 +1899,10 @@ def walker_register(
             detail="Mobile number already registered"
         )
     
-    # Check if name already exists
-    existing_name = db.query(Walker).filter(
-        func.lower(Walker.name) == data.name.strip().lower()
-    ).first()
-    if existing_name:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Walker name already exists"
-        )
+    # ==========================================
+    # REMOVED: Name uniqueness check
+    # Walkers can have the same name
+    # ==========================================
     
     try:
         # Create new walker
