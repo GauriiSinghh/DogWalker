@@ -1,19 +1,19 @@
-"""Additive migration for booking cancelled_by field."""
+import sqlite3
+from sqlalchemy import text, inspect
 from db import engine
-from sqlalchemy import text
 
-MIGRATIONS = [
-    "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS cancelled_by VARCHAR(50);",
-]
-
-
-def migrate_cancelled_by() -> None:
+def migrate_cancelled_by():
+    """Add cancelled_by column if it doesn't exist"""
     with engine.connect() as conn:
-        for stmt in MIGRATIONS:
-            conn.execute(text(stmt))
-        conn.commit()
-
+        inspector = inspect(engine)
+        columns = [col['name'] for col in inspector.get_columns('bookings')]
+        
+        if 'cancelled_by' not in columns:
+            conn.execute(text("ALTER TABLE bookings ADD COLUMN cancelled_by VARCHAR;"))
+            conn.commit()
+            print("✅ Added cancelled_by column")
+        else:
+            print("✅ cancelled_by column already exists")
 
 if __name__ == "__main__":
     migrate_cancelled_by()
-    print("Cancelled_by field migration completed successfully.")

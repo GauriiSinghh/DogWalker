@@ -1863,6 +1863,83 @@ def walker_login(data: WalkerLogin, db: Session = Depends(get_db)):
     }
 
 
+# ==========================================
+# WALKER REGISTER ENDPOINT (NEW)
+# ==========================================
+@app.post("/walker/register", tags=["Walker"], status_code=status.HTTP_201_CREATED)
+def walker_register(
+    data: WalkerCreate,
+    db: Session = Depends(get_db),
+):
+    """
+    Register a new walker.
+    
+    - Checks if email, mobile number, or name already exists
+    - Hashes the password
+    - Creates a new walker account
+    - Returns the created walker profile
+    """
+    # Check if email already exists
+    existing_email = db.query(Walker).filter(
+        func.lower(Walker.email) == data.email.strip().lower()
+    ).first()
+    if existing_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    # Check if mobile number already exists
+    existing_mobile = db.query(Walker).filter(
+        Walker.mobile_number == data.mobile_number.strip()
+    ).first()
+    if existing_mobile:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mobile number already registered"
+        )
+    
+    # Check if name already exists
+    existing_name = db.query(Walker).filter(
+        func.lower(Walker.name) == data.name.strip().lower()
+    ).first()
+    if existing_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Walker name already exists"
+        )
+    
+    try:
+        # Create new walker
+        hashed_pw = hash_password(data.password)
+        new_walker = Walker(
+            name=data.name.strip(),
+            email=data.email.strip().lower(),
+            mobile=data.mobile_number.strip(),
+            mobile_number=data.mobile_number.strip(),
+            hashed_password=hashed_pw,
+            address=data.address.strip(),
+            profile_image=data.profile_image.strip() if data.profile_image else None,
+            is_available=data.is_available,
+            is_active=True,
+        )
+        
+        db.add(new_walker)
+        db.commit()
+        db.refresh(new_walker)
+        
+        # Return the walker profile
+        return WalkerProfileOut.model_validate(new_walker)
+        
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Database error during walker registration for %s", data.email)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not create walker account. Please try again.",
+        )
+
+
 @app.post("/walker/logout", tags=["Walker"])
 def walker_logout(current_walker=Depends(get_current_walker)):
     return {"message": "logged out"}

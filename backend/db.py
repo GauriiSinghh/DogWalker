@@ -1,34 +1,17 @@
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
-
-load_dotenv()
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-def _normalize_database_url(url: str) -> str:
-    if url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql://", 1)
-    # psycopg2 on Windows is unreliable with channel_binding=require (Neon pooler)
-    url = url.replace("&channel_binding=require", "")
-    url = url.replace("?channel_binding=require&", "?")
-    url = url.replace("?channel_binding=require", "")
-    return url
+load_dotenv()
 
-
-DATABASE_URL = _normalize_database_url(
-    os.getenv(
-        "DATABASE_URL",
-        "postgresql://postgres:gauri2442@localhost:5432/dogwalking_db",
-
-    )
-)
+# Use SQLite
+DATABASE_URL = "sqlite:///./walkers.db"
 print("databse url=", DATABASE_URL)
 
 engine = create_engine(
     DATABASE_URL,
-    pool_pre_ping=True,
-    pool_recycle=300,
-    connect_args={"connect_timeout": 15},
+    connect_args={"check_same_thread": False}
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
