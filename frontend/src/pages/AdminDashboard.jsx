@@ -263,35 +263,33 @@ const ws = new WebSocket(WS_URL);
       />
 
       <div className="admin-main">
-        {activeSection !== "dashboard" && activeSection !== "settings" &&(
-        <motion.header
-          className="admin-header"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-        >
-          <div className="admin-header__left">
-            <h1 className="admin-header__welcome">Welcome back, Admin</h1>
-            <p className="admin-header__date">{formatDate(new Date())}</p>
-          </div>
-
-          <div className="admin-header__right">
-            <div className="admin-header__search">
-              <FiSearch className="admin-header__search-icon" />
-              <input
-                type="search"
-                className="admin-header__search-input"
-                placeholder={searchPlaceholder}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+        {activeSection !== "dashboard" && activeSection !== "settings" && (
+          <motion.header
+            className="admin-header"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            <div className="admin-header__left">
+              <h1 className="admin-header__welcome">Welcome back, Admin</h1>
+              <p className="admin-header__date">{formatDate(new Date())}</p>
             </div>
-            {/* <ThemeToggle theme={theme} onToggle={toggleTheme} />
-            <div className="admin-header__avatar" title="Admin">
-              A
-            </div> */}
-          </div>
-        </motion.header>
+
+            <div className="admin-header__right">
+              {activeSection !== "walkers" && (
+                <div className="admin-header__search">
+                  <FiSearch className="admin-header__search-icon" />
+                  <input
+                    type="search"
+                    className="admin-header__search-input"
+                    placeholder={searchPlaceholder}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+          </motion.header>
         )}
 
         <main className="admin-content">

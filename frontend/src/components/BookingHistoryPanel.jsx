@@ -33,9 +33,20 @@ const STATUS_CLASS = {
   CANCELLED: "bh-badge--cancelled",
 };
 
+function parseLocalDate(d) {
+  if (!d) return null;
+  if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    const [year, month, day] = d.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }
+  const parsed = new Date(d);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function fmtDate(d) {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-IN", {
+  const parsed = parseLocalDate(d);
+  if (!parsed) return "—";
+  return parsed.toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -241,7 +252,21 @@ export default function BookingHistoryPanel() {
       if (serviceFilter !== "all" && b.service_type !== serviceFilter) return false;
       if (statusFilter !== "all" && b.status !== statusFilter) return false;
       if (paymentFilter !== "all" && b.payment_status !== paymentFilter) return false;
-      if (dateFilter && b.booking_date !== dateFilter) return false;
+      if (dateFilter) {
+        let bDateStr = "";
+        if (typeof b.booking_date === "string") {
+          bDateStr = b.booking_date.slice(0, 10);
+        } else if (b.booking_date) {
+          const parsed = parseLocalDate(b.booking_date);
+          if (parsed) {
+            const yr = parsed.getFullYear();
+            const mo = String(parsed.getMonth() + 1).padStart(2, "0");
+            const dy = String(parsed.getDate()).padStart(2, "0");
+            bDateStr = `${yr}-${mo}-${dy}`;
+          }
+        }
+        if (bDateStr !== dateFilter) return false;
+      }
       return true;
     });
   }, [bookings, tab, serviceFilter, statusFilter, paymentFilter, dateFilter]);
@@ -358,13 +383,25 @@ export default function BookingHistoryPanel() {
           <option value="PAID">Paid</option>
           <option value="PENDING">Pending</option>
         </select>
-        <input
-          type="date"
-          className="bh-filter-select"
-          value={dateFilter}
-          onChange={(e) => setDateFilter(e.target.value)}
-          aria-label="Filter by date"
-        />
+        <div className="bh-date-filter-wrap">
+          <input
+            type="date"
+            className="bh-filter-select bh-filter-date"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            aria-label="Filter by date"
+          />
+          {dateFilter && (
+            <button
+              type="button"
+              className="bh-filter-clear"
+              onClick={() => setDateFilter("")}
+              title="Clear date filter"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       <AnimatePresence mode="wait">

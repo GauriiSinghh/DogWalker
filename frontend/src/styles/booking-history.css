@@ -77,19 +77,59 @@
 .bh-filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
+  width: 100%;
 }
 
 .bh-filter-select {
-  padding: 8px 12px;
+  flex: 1;
+  min-width: 140px;
+  padding: 10px 14px;
   border-radius: 10px;
   border: 1px solid rgba(0, 0, 0, 0.08);
   background: #ffffff;
-  font-size: 0.85rem;
-  font-weight: 500;
+  font-size: 0.88rem;
+  font-weight: 600;
   color: var(--z-dark, #111827);
-  min-width: 130px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.bh-filter-select:focus {
+  outline: none;
+  border-color: #f97316;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
+}
+
+.bh-date-filter-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 140px;
+}
+
+.bh-filter-date {
+  width: 100%;
+}
+
+.bh-filter-clear {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color 150ms ease;
+}
+
+.bh-filter-clear:hover {
+  color: #ef4444;
 }
 
 .bh-list {
@@ -335,6 +375,18 @@
 }
 
 @media (max-width: 640px) {
+  .bh-filters {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .bh-filter-select,
+  .bh-date-filter-wrap {
+    min-width: 0;
+    width: 100%;
+  }
+
   .bh-card-header {
     flex-direction: column;
   }
@@ -348,3 +400,10 @@
     justify-content: flex-start;
   }
 }
+
+@media (max-width: 420px) {
+  .bh-filters {
+    grid-template-columns: 1fr;
+  }
+}
+

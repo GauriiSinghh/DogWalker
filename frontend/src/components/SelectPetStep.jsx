@@ -243,25 +243,7 @@ export default function SelectPetStep({
       </div>
 
       {/* Sticky Bottom Action Bar (Fixed on mobile / always reachable) */}
-      <div
-        style={{
-          position: "sticky",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          background: "rgba(255, 255, 255, 0.95)",
-          backdropFilter: "blur(10px)",
-          WebkitBackdropFilter: "blur(10px)",
-          borderTop: "1px solid #e2e8f0",
-          padding: "14px 24px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-          zIndex: 10,
-          borderRadius: "0 0 24px 24px",
-        }}
-      >
+      <div className="select-pet-footer">
         {onBack && (
           <button
             type="button"
